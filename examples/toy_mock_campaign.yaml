@@ -1,0 +1,88 @@
+study:
+  id: toy_mock_campaign
+  mode: source_isolation
+  active_source_blocks:
+    - environment.density
+
+geometries:
+  - id: Cube
+    name: Cube
+    characteristic_length: 0.1
+    geometry_class: cube
+    tags: [toy]
+
+regimes:
+  - id: quiet_demo
+    label: quiet_demo
+    descriptors:
+      altitude_km: 250
+      characteristic_length: 0.1
+      knudsen_number: 1.0
+      speed_ratio: 8.0
+      freestream_temperature: 850.0
+      composition_descriptor: simple_n2_o
+      solar_activity_state: quiet
+      geomagnetic_activity_state: quiet
+      wind_state: low
+      geometry_class: cube
+      surface_state: nominal
+
+sources:
+  blocks:
+    - name: environment.density
+
+variables:
+  - name: density_scale
+    source_block: environment.density
+    units: "-"
+    distribution:
+      kind: normal
+      params:
+        mean: 1.0
+        std: 0.05
+    baseline: 1.0
+    bounds: [0.8, 1.2]
+
+sampling:
+  method: independent
+  sample_count: 8
+  max_production_samples: 32
+
+models:
+  hf:
+    id: Mock_HF
+    kind: mock
+  lf:
+    - id: Mock_LF
+      kind: mock
+  available_qois:
+    Mock_HF: [C_D]
+    Mock_LF: [C_D]
+
+qois:
+  direct: [C_D]
+  derived: []
+
+pilot:
+  size: 4
+  sizes: [4]
+  robustness_repetitions: 2
+
+budget:
+  total: 12
+  hf_fraction: 0.25
+
+repetitions: 1
+
+seeds:
+  global: 20260609
+
+outputs:
+  dir: outputs/toy_mock_campaign
+  write_parquet: false
+  write_config_snapshot: true
+  plots: false
+
+execution:
+  backend: mock
+  resume: false

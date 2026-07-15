@@ -1,0 +1,57 @@
+# Python and environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.venv/
+venv/
+
+# Build products
+build/
+dist/
+wheelhouse/
+
+# Local configuration
+.env
+.env.*
+*.local
+
+# Framework output and external data
+outputs/
+data/
+external/
+campaign_outputs/
+paper_postprocessed/
+piclas/job_*/
+piclas/group_jobs/
+piclas/debug_geometry/
+piclas/piclas
+piclas/piclas2vtk
+ADBSat-PyVersion/MFMC_Jobs_*/
+*.out
+*.log
+slurm-*.out
+
+# Large solver artifacts
+*.h5
+*.msh
+*.mat
+*.obj
+*.parquet
+*.tar
+*.tar.gz
+*.tgz
+*.vtk
+*.vtu
+*.zip
+
+# Runtime assets intentionally versioned with the production checkout
+!piclas/*_mesh.h5
+!ADBSat-PyVersion/inou/models/*.mat
+!ADBSat-PyVersion/inou/obj_files/*.obj
+
+# Editors and platforms
+.DS_Store
+.idea/
+.vscode/

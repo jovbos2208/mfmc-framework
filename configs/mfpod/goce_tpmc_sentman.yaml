@@ -1,0 +1,40 @@
+case_name: GOCE-244km-TPMC-Sentman
+geometry_id: GOCE
+output_root: ../../outputs/field_pod_mfmc_three_fidelity
+
+high_fidelity: DSMC
+low_fidelity_basis_source: TPMC
+control_variates: [TPMC, SENTMAN]
+snapshot_type: full_traction
+
+fidelity_archives:
+  DSMC: ../../data/field_inputs/goce_244km/DSMC_surface_loads.npz
+  TPMC: ../../data/field_inputs/goce_244km/TPMC_surface_loads.npz
+  SENTMAN: ../../data/field_inputs/goce_244km/SENTMAN_surface_loads.npz
+
+basis_size_s: 50
+pod_modes_r: 5
+budgets: [10, 20, 50]
+repeats: 10
+random_seed: 12345
+include_pilot_cost: false
+mfmc_weight_mode: shared_weights
+shared_weight_response: coefficient_norm
+psd_correction: none
+mfmc_hf_fraction: 0.5
+
+costs:
+  DSMC: 1.0
+  TPMC: 0.05
+  SENTMAN: 0.001
+
+topology_tolerance:
+  area_rtol: 1.0e-10
+  center_atol: 1.0e-12
+  normal_atol: 1.0e-12
+
+projection_residual_warning_threshold:
+  mean: 0.10
+  max: 0.30
+
+cd_reconstruction_tolerance: 1.0e-6

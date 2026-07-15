@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mfmc-framework"
+version = "0.2.0"
+description = "Campaign-oriented MFMC and multifidelity POD workflows for simulation-based uncertainty quantification."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "MFMC Framework Contributors" }]
+keywords = ["multifidelity", "monte-carlo", "POD", "uncertainty-quantification", "HPC"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = [
+  "matplotlib>=3.7",
+  "numpy>=1.24",
+  "PyYAML>=6.0",
+  "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+production = [
+  "h5py>=3.8",
+  "meshio>=5.3",
+  "pandas>=2.0",
+  "pymsis>=0.10",
+  "pyvista>=0.43",
+]
+dev = [
+  "build>=1.0",
+  "pytest>=7.4",
+]
+
+[project.scripts]
+mfmc-campaign = "mfmc_campaign.cli:main"
+mfmc-mfpod = "mfmc_campaign.field_mfpod.cli:main"
+
+[tool.setuptools]
+py-modules = ["PICLas", "PICLas_prandtl", "ADBSat", "ADBSat_prandtl"]
+
+[tool.setuptools.packages.find]
+include = ["mfmc_campaign*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
