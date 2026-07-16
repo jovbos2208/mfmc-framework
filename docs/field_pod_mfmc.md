@@ -96,6 +96,12 @@ separate DSMC reference set, and runs the field estimator, matrix-free POD and
 benchmark. Its persistent files are below
 `outputs/field_pod_mfmc_three_fidelity/<case>/production/`:
 
+PICLAS solver submission is non-blocking across fidelities: all DSMC and TPMC
+jobs for a stage are submitted before collection begins. By default, each DSMC
+job contains one case, while each TPMC job contains ten sequential cases.
+Collection and postprocessing then run sequentially by workload (DSMC before
+TPMC), while already-submitted solver jobs continue running in the scheduler.
+
 - `sample_plan.json`: immutable samples, IDs and disjoint role streams
 - `state.json`: completed stages, measured costs and submitted counts
 - `roles.json`: exact pilot/reference/production IDs used by analysis

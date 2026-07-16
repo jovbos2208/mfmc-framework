@@ -39,9 +39,6 @@ field_allocation:
   bootstrap_repeats: 500
   robust_quantile: 0.90
   random_seed: 12345
-  adbsat_runtime:
-    source_base_dir: ADBSat-PyVersion
-    base_dir: outputs/mfpod_runtime/cube_300km/ADBSat-PyVersion
   max_enumeration_candidates: 250000
 
 allocation_constraints:
@@ -84,6 +81,9 @@ production:
   backend: legacy_slurm
   study_id: cube_300km_field_mfpod
   random_seed: 12345
+  adbsat_runtime:
+    source_base_dir: ADBSat-PyVersion
+    base_dir: outputs/mfpod_runtime/cube_300km/ADBSat-PyVersion
   model_ids:
     DSMC: PICLas_HF
     TPMC: PICLas_TPMC
@@ -201,6 +201,7 @@ production:
         simulator_module: PICLas_prandtl
         mpi_procs: 64
         submission_batch_size: 10
+        submission_group_size: 1
         surface_archive:
           enabled: true
           path: data/field_inputs/cube_300km/DSMC_surface_loads.npz
@@ -216,6 +217,7 @@ production:
           simulator_module: PICLas_prandtl
           mpi_procs: 64
           submission_batch_size: 10
+          submission_group_size: 10
           surface_archive:
             enabled: true
             path: data/field_inputs/cube_300km/TPMC_surface_loads.npz

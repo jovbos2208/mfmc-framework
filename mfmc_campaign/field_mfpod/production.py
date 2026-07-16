@@ -251,7 +251,7 @@ def _request_metadata(cfg: MFPODConfig, settings: dict[str, Any]) -> dict[str, A
     return metadata
 
 
-def _run_fidelity(
+def _prepare_fidelity_evaluation(
     cfg: MFPODConfig,
     settings: dict[str, Any],
     registry: Any,
@@ -261,7 +261,7 @@ def _run_fidelity(
     sample_lookup: dict[str, dict[str, Any]],
     *,
     phase: str,
-) -> dict[str, Any]:
+) -> tuple[Any, Any, list[str]] | dict[str, Any]:
     archive = cfg.archives[fidelity]
     complete = _archive_ids(archive)
     pending = [sample_id for sample_id in sample_ids if sample_id not in complete]
@@ -283,7 +283,17 @@ def _run_fidelity(
         seed=int(settings.get("random_seed", cfg.random_seed)),
         metadata=_request_metadata(cfg, settings),
     )
-    result = adapter.evaluate(request)
+    return adapter, request, pending
+
+
+def _finish_fidelity_evaluation(
+    cfg: MFPODConfig,
+    fidelity: str,
+    requested: int,
+    pending: list[str],
+    result: Any,
+) -> dict[str, Any]:
+    archive = cfg.archives[fidelity]
     missing = set(pending) - _archive_ids(archive)
     if missing:
         raise MFPODError(f"{fidelity} completed without archiving sample ids {sorted(missing)[:5]}")
@@ -291,12 +301,66 @@ def _run_fidelity(
     finite_costs = finite_costs[np.isfinite(finite_costs) & (finite_costs > 0.0)]
     return {
         "fidelity": fidelity,
-        "requested": len(sample_ids),
+        "requested": requested,
         "submitted": len(pending),
         "successful_results": len(result.sample_ids),
         "mean_cost": float(np.mean(finite_costs)) if finite_costs.size else None,
         "status": "complete",
     }
+
+
+def _run_fidelity(
+    cfg: MFPODConfig,
+    settings: dict[str, Any],
+    registry: Any,
+    model_ids: dict[str, str],
+    fidelity: str,
+    sample_ids: list[str],
+    sample_lookup: dict[str, dict[str, Any]],
+    *,
+    phase: str,
+) -> dict[str, Any]:
+    prepared = _prepare_fidelity_evaluation(
+        cfg, settings, registry, model_ids, fidelity, sample_ids, sample_lookup, phase=phase
+    )
+    if isinstance(prepared, dict):
+        return prepared
+    adapter, request, pending = prepared
+    result = adapter.evaluate(request)
+    return _finish_fidelity_evaluation(cfg, fidelity, len(sample_ids), pending, result)
+
+
+def _run_piclas_workloads(
+    cfg: MFPODConfig,
+    settings: dict[str, Any],
+    registry: Any,
+    model_ids: dict[str, str],
+    workloads: list[tuple[str, str, list[str], str]],
+    sample_lookup: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Submit every PICLAS workload first, then collect/postprocess in order."""
+
+    results: dict[str, dict[str, Any]] = {}
+    submitted = []
+    for key, fidelity, sample_ids, phase in workloads:
+        prepared = _prepare_fidelity_evaluation(
+            cfg, settings, registry, model_ids, fidelity, sample_ids, sample_lookup, phase=phase
+        )
+        if isinstance(prepared, dict):
+            results[key] = prepared
+            continue
+        adapter, request, pending = prepared
+        if not all(hasattr(adapter, name) for name in ("submit", "collect")):
+            raise MFPODError(f"Parallel workload {key} does not use a submit/collect PICLAS adapter")
+        handle = adapter.submit(request)
+        submitted.append((key, fidelity, len(sample_ids), pending, adapter, handle))
+
+    # All DSMC/TPMC solver jobs are now in the queue. Collection is deliberately
+    # sequential so only one fidelity's postprocessing is active at a time.
+    for key, fidelity, requested, pending, adapter, handle in submitted:
+        result = adapter.collect(handle)
+        results[key] = _finish_fidelity_evaluation(cfg, fidelity, requested, pending, result)
+    return results
 
 
 def _pilot_archive(cfg: MFPODConfig, pilot_ids: list[str]) -> Path:
@@ -388,27 +452,34 @@ def run_production(
     pilot_ids = list(plan["roles"]["pilot"])
     if "pilot" not in state["completed_stages"]:
         pilot_runs = dict(state.get("pilot_runs", {}))
+        piclas_workloads = []
         for fidelity in model_ids:
             if model_ids[fidelity] in unmapped_models:
                 continue
             if pilot_runs.get(fidelity, {}).get("status") == "complete":
+                continue
+            adapter = registry.get(model_ids[fidelity])
+            if all(hasattr(adapter, name) for name in ("submit", "collect")):
+                piclas_workloads.append((fidelity, fidelity, pilot_ids, "pilot"))
+        pilot_runs.update(_run_piclas_workloads(
+            cfg, settings, registry, model_ids, piclas_workloads, sample_lookup
+        ))
+        state["pilot_runs"] = pilot_runs
+        _write_json(state_path, state)
+        if unmapped_models:
+            _build_missing_adbsat_mappings(cfg, settings, unmapped_models)
+            registry = build_adapter_registry(_adapter_config(settings))
+        for fidelity in model_ids:
+            if pilot_runs.get(fidelity, {}).get("status") == "complete":
+                continue
+            adapter = registry.get(model_ids[fidelity])
+            if all(hasattr(adapter, name) for name in ("submit", "collect")):
                 continue
             pilot_runs[fidelity] = _run_fidelity(
                 cfg, settings, registry, model_ids, fidelity, pilot_ids, sample_lookup, phase="pilot"
             )
             state["pilot_runs"] = pilot_runs
             _write_json(state_path, state)
-        if unmapped_models:
-            _build_missing_adbsat_mappings(cfg, settings, unmapped_models)
-            registry = build_adapter_registry(_adapter_config(settings))
-            for fidelity in model_ids:
-                if model_ids[fidelity] not in unmapped_models:
-                    continue
-                pilot_runs[fidelity] = _run_fidelity(
-                    cfg, settings, registry, model_ids, fidelity, pilot_ids, sample_lookup, phase="pilot"
-                )
-                state["pilot_runs"] = pilot_runs
-                _write_json(state_path, state)
         state["completed_stages"].append("pilot")
         _write_json(state_path, state)
     if stop_after == "pilot":
@@ -445,9 +516,27 @@ def run_production(
     if "production" not in state["completed_stages"]:
         runs = []
         reference_ids = list(plan["roles"]["reference_DSMC"])
-        runs.append(_run_fidelity(cfg, settings, registry, model_ids, "DSMC", reference_ids, sample_lookup, phase="reference"))
+        piclas_workloads = [
+            ("reference_DSMC", "DSMC", reference_ids, "reference"),
+        ]
         for fidelity, count in counts.items():
-            runs.append(_run_fidelity(cfg, settings, registry, model_ids, fidelity, production_stream[:count], sample_lookup, phase="production"))
+            adapter = registry.get(model_ids[fidelity])
+            if all(hasattr(adapter, name) for name in ("submit", "collect")):
+                piclas_workloads.append(
+                    (f"production_{fidelity}", fidelity, production_stream[:count], "production")
+                )
+        piclas_runs = _run_piclas_workloads(
+            cfg, settings, registry, model_ids, piclas_workloads, sample_lookup
+        )
+        runs.extend(piclas_runs.values())
+        for fidelity, count in counts.items():
+            adapter = registry.get(model_ids[fidelity])
+            if all(hasattr(adapter, name) for name in ("submit", "collect")):
+                continue
+            runs.append(_run_fidelity(
+                cfg, settings, registry, model_ids, fidelity,
+                production_stream[:count], sample_lookup, phase="production"
+            ))
         roles = {
             "pilot": pilot_ids,
             "reference_DSMC": reference_ids,

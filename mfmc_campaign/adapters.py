@@ -1064,10 +1064,14 @@ class LegacyPiclasAdapter(BaseModelAdapter):
             self.payload_defaults.setdefault("piclas_mode", "tpmc")
             self.payload_defaults.setdefault("t_end_s", 1.0e-4)
             self.payload_defaults.setdefault("sampling_iterations", 250)
+            # One TPMC SLURM job processes ten cases sequentially by default.
+            sim_kwargs.setdefault("submission_group_size", 10)
         else:
             self.payload_defaults.setdefault("piclas_mode", "dsmc")
             self.payload_defaults.setdefault("t_end_s", 1.0e-3)
             self.payload_defaults.setdefault("sampling_iterations", 2500)
+            # DSMC cases are independent SLURM jobs by default.
+            sim_kwargs.setdefault("submission_group_size", 1)
         PiclasSimulator = getattr(importlib.import_module(simulator_module), "PiclasSimulator")
         try:
             signature = inspect.signature(PiclasSimulator.__init__)

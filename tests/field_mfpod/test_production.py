@@ -1,9 +1,18 @@
 import json
+import sys
+import types
 
+import numpy as np
 import yaml
 
+from mfmc_campaign.adapters import LegacyPiclasAdapter
 from mfmc_campaign.field_mfpod.config import load_config
-from mfmc_campaign.field_mfpod.production import production_status, run_production
+from mfmc_campaign.field_mfpod.production import (
+    _run_piclas_workloads,
+    production_status,
+    run_production,
+)
+from mfmc_campaign.types import EvaluationResult
 
 
 def production_config(tmp_path):
@@ -78,3 +87,73 @@ def test_production_dry_run_writes_deterministic_nested_plan_and_state(tmp_path)
     assert plan["roles"]["production_stream"][:3] != plan["roles"]["pilot"]
     assert state["status"] == "planned"
 
+
+def test_piclas_workloads_are_all_submitted_before_sequential_collection(tmp_path):
+    path = tmp_path / "production.yaml"
+    path.write_text(yaml.safe_dump(production_config(tmp_path)), encoding="utf-8")
+    cfg = load_config(path)
+    events = []
+
+    class FakeAdapter:
+        def __init__(self, fidelity, archive):
+            self.fidelity = fidelity
+            self.archive = archive
+
+        def submit(self, request):
+            events.append(f"submit:{self.fidelity}")
+            return request
+
+        def collect(self, request):
+            events.append(f"collect:{self.fidelity}")
+            self.archive.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(self.archive, sample_id=np.asarray(request.sample_ids))
+            return EvaluationResult(
+                values_by_qoi={"C_D": [1.0] * len(request.sample_ids)},
+                costs=[1.0] * len(request.sample_ids),
+                sample_ids=request.sample_ids,
+            )
+
+    adapters = {
+        "Mock_HF": FakeAdapter("DSMC", cfg.archives["DSMC"]),
+        "Mock_TPMC": FakeAdapter("TPMC", cfg.archives["TPMC"]),
+    }
+
+    class Registry:
+        def get(self, model_id):
+            return adapters[model_id]
+
+    sample_lookup = {"d0": {"database_index": 0}, "t0": {"database_index": 1}}
+    result = _run_piclas_workloads(
+        cfg,
+        cfg.raw["production"],
+        Registry(),
+        {"DSMC": "Mock_HF", "TPMC": "Mock_TPMC"},
+        [("DSMC", "DSMC", ["d0"], "pilot"), ("TPMC", "TPMC", ["t0"], "pilot")],
+        sample_lookup,
+    )
+
+    assert events == ["submit:DSMC", "submit:TPMC", "collect:DSMC", "collect:TPMC"]
+    assert result["DSMC"]["status"] == "complete"
+    assert result["TPMC"]["status"] == "complete"
+
+
+def test_piclas_default_group_sizes_are_one_for_dsmc_and_ten_for_tpmc(monkeypatch):
+    module = types.ModuleType("fake_piclas_grouping")
+
+    class Simulator:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    module.PiclasSimulator = Simulator
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+
+    dsmc = LegacyPiclasAdapter("HF", ["C_D"], {"simulator_module": module.__name__}, fidelity="hf")
+    tpmc = LegacyPiclasAdapter(
+        "TPMC",
+        ["C_D"],
+        {"simulator_module": module.__name__, "piclas_mode": "tpmc"},
+        fidelity="lf",
+    )
+
+    assert dsmc.sim.kwargs["submission_group_size"] == 1
+    assert tpmc.sim.kwargs["submission_group_size"] == 10
