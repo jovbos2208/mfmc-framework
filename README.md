@@ -45,8 +45,14 @@ mfmc-campaign run-pilots-sweep config-a.yaml config-b.yaml --resume
 mfmc-campaign check-field-data configs/mfpod/cube_tpmc_sentman.yaml
 mfmc-campaign run-field-pod-mfmc configs/mfpod/cube_tpmc_sentman.yaml
 
-# Aretz-Willcox style MFPOD workflow
+# Full-field, allocation-first MFMC/POD workflow
 mfmc-mfpod inspect --config configs/mfpod/cube_tpmc_sentman.yaml
+mfmc-mfpod prepare-field-snapshots --config configs/mfpod/cube_tpmc_sentman.yaml
+mfmc-mfpod field-pilot --config configs/mfpod/cube_tpmc_sentman.yaml
+mfmc-mfpod optimal-allocation --config configs/mfpod/cube_tpmc_sentman.yaml
+mfmc-mfpod field-estimate --config configs/mfpod/cube_tpmc_sentman.yaml
+mfmc-mfpod field-pod --config configs/mfpod/cube_tpmc_sentman.yaml
+mfmc-mfpod field-benchmark --config configs/mfpod/cube_tpmc_sentman.yaml
 mfmc-mfpod run-all --config configs/mfpod/cube_tpmc_sentman.yaml
 
 # Canonical PICLAS VTU to ADBSat OBJ/MAT and conservative face mapping

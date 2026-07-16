@@ -33,6 +33,15 @@ def _scalar_string(npz: np.lib.npyio.NpzFile, name: str, default: str) -> str:
     return str(np.asarray(npz[name]).reshape(-1)[0])
 
 
+def _component_order(npz: np.lib.npyio.NpzFile) -> tuple[str, ...]:
+    if "component_order" not in npz.files:
+        return ("x", "y", "z")
+    values = np.asarray(npz["component_order"]).reshape(-1)
+    if values.size == 1:
+        return tuple(part.strip() for part in str(values[0]).split(","))
+    return tuple(str(value) for value in values)
+
+
 class PICLASIdentitySurfaceAdapter(SurfaceSnapshotAdapter):
     """NPZ adapter that permits only identical, ordered PICLAS surfaces."""
 
@@ -52,7 +61,7 @@ class PICLASIdentitySurfaceAdapter(SurfaceSnapshotAdapter):
         with np.load(self.archives[fidelity.upper()], allow_pickle=False) as npz:
             geometry_id = _scalar_string(npz, "geometry_id", case)
             coordinate_frame = _scalar_string(npz, "coordinate_frame", "body_fixed")
-            component_order = tuple(_scalar_string(npz, "component_order", "x,y,z").split(","))
+            component_order = _component_order(npz)
         g = archive.geometry
         return SurfaceGeometry(
             face_area=g.face_area.copy(), A_ref=g.A_ref, geometry_id=geometry_id,
@@ -178,11 +187,12 @@ def moment_functionals(geometry: SurfaceGeometry, reference_length: float) -> np
 
 def inspect_surface_data(case: str, archives: dict[str, str | Path], output_dir: Optional[Path] = None, tolerances: Optional[dict[str, float]] = None) -> dict[str, Any]:
     report: dict[str, Any] = {"case": case, "fidelities": {}, "missing_fields": [], "missing_preferred_fields": [], "invalid_samples": [], "duplicate_sample_ids": {}}
-    required = {"force_per_area", "sample_id", "face_area", "A_ref", "q_inf", "u_hat_inf", "fidelity", "case_name", "geometry_id"}
-    preferred = {"face_center", "face_normal", "reference_point", "C_D", "cpu_hours", "hardware", "coordinate_frame"}
+    required = {"force_per_area", "sample_id", "face_area", "A_ref", "q_inf", "u_hat_inf", "fidelity", "case_name", "geometry_id", "coordinate_frame", "component_order"}
+    preferred = {"face_center", "face_normal", "reference_point", "C_D", "cpu_hours", "hardware"}
     batches = {}
     adapter = PICLASIdentitySurfaceAdapter(archives, tolerances)
-    for fidelity in ("DSMC", "TPMC"):
+    fidelities = ["DSMC", *sorted(str(name).upper() for name in archives if str(name).upper() != "DSMC")]
+    for fidelity in fidelities:
         path = Path(archives.get(fidelity, ""))
         if not path.is_file():
             report["fidelities"][fidelity] = {"path": str(path), "exists": False, "n_snapshots": 0}
@@ -201,15 +211,35 @@ def inspect_surface_data(case: str, archives: dict[str, str | Path], output_dir:
             batches[fidelity] = adapter.load_batch(case, fidelity)
         except Exception as exc:
             report["invalid_samples"].append(f"{fidelity}: {exc}")
-    if len(batches) == 2:
-        hf_ids = set(batches["DSMC"].sample_ids.tolist())
-        lf_ids = set(batches["TPMC"].sample_ids.tolist())
-        report.update({"n_dsmc": len(hf_ids), "n_tpmc": len(lf_ids), "n_paired": len(hf_ids & lf_ids), "n_additional_tpmc": len(lf_ids - hf_ids), "n_faces": batches["DSMC"].geometry.n_faces})
-        report["topology"] = validate_surface_topology(batches["DSMC"].geometry, batches["TPMC"].geometry, tolerances)
-        report["topology_consistent"] = report["topology"]["identity_mapping_allowed"]
+    if "DSMC" in batches and len(batches) == len(fidelities):
+        id_sets = {name: set(batch.sample_ids.tolist()) for name, batch in batches.items()}
+        paired_ids = set.intersection(*(id_sets[name] for name in fidelities))
+        hf_ids = id_sets["DSMC"]
+        report.update({
+            "n_dsmc": len(hf_ids),
+            "n_tpmc": len(id_sets.get("TPMC", set())),
+            "n_sentman": len(id_sets.get("SENTMAN", set())),
+            "n_paired": len(paired_ids),
+            "n_additional_tpmc": len(id_sets.get("TPMC", set()) - hf_ids),
+            "n_additional_sentman": len(id_sets.get("SENTMAN", set()) - hf_ids),
+            "n_faces": batches["DSMC"].geometry.n_faces,
+        })
+        topology_by_model = {
+            name: validate_surface_topology(batches["DSMC"].geometry, batches[name].geometry, tolerances)
+            for name in fidelities[1:]
+        }
+        report["topology_by_model"] = topology_by_model
+        report["topology"] = (
+            topology_by_model["TPMC"]
+            if list(topology_by_model) == ["TPMC"]
+            else topology_by_model
+        )
+        report["topology_consistent"] = all(
+            item["identity_mapping_allowed"] for item in topology_by_model.values()
+        )
         report["force_functionals_available"] = True
         report["torque_functionals_available"] = batches["DSMC"].geometry.face_center is not None and batches["DSMC"].geometry.reference_point is not None
-        report["feasible_maximum"] = {"m_H": len(hf_ids & lf_ids), "m_L": len(lf_ids)}
+        report["feasible_maximum"] = {name: len(ids) for name, ids in id_sets.items()}
         report["global_cd_reconstructable"] = "C_D" in report["fidelities"]["DSMC"]["fields"]
         if report["global_cd_reconstructable"]:
             archive = adapter._archive("DSMC")
@@ -223,7 +253,7 @@ def inspect_surface_data(case: str, archives: dict[str, str | Path], output_dir:
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "data_availability_report.json").write_text(json.dumps(jsonable(report), indent=2), encoding="utf-8")
-        lines = [f"# MFPOD data availability: {case}", "", f"Ready: **{report['ready']}**", "", f"DSMC: {report.get('n_dsmc', 0)}; TPMC: {report.get('n_tpmc', 0)}; paired: {report.get('n_paired', 0)}; additional TPMC: {report.get('n_additional_tpmc', 0)}."]
+        lines = [f"# MFPOD data availability: {case}", "", f"Ready: **{report['ready']}**", "", f"DSMC: {report.get('n_dsmc', 0)}; TPMC: {report.get('n_tpmc', 0)}; Sentman: {report.get('n_sentman', 0)}; all-model paired: {report.get('n_paired', 0)}; additional TPMC: {report.get('n_additional_tpmc', 0)}; additional Sentman: {report.get('n_additional_sentman', 0)}."]
         if report["missing_fields"]: lines += ["", "Missing fields: " + ", ".join(report["missing_fields"])]
         if report["missing_preferred_fields"]: lines += ["", "Missing preferred fields: " + ", ".join(report["missing_preferred_fields"])]
         if report["invalid_samples"]: lines += ["", "Invalid: " + "; ".join(report["invalid_samples"])]

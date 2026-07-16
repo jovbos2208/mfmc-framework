@@ -3,38 +3,72 @@ geometry_id: Cube
 output_root: ../../outputs/field_pod_mfmc_three_fidelity
 
 high_fidelity: DSMC
-low_fidelity_basis_source: TPMC
 control_variates: [TPMC, SENTMAN]
-snapshot_type: full_traction
 
 fidelity_archives:
   DSMC: ../../data/field_inputs/cube_300km/DSMC_surface_loads.npz
   TPMC: ../../data/field_inputs/cube_300km/TPMC_surface_loads.npz
   SENTMAN: ../../data/field_inputs/cube_300km/SENTMAN_surface_loads.npz
 
-basis_size_s: 50
-pod_modes_r: 5
-budgets: [10, 20, 50]
-repeats: 10
-random_seed: 12345
-include_pilot_cost: false
-mfmc_weight_mode: shared_weights
-shared_weight_response: coefficient_norm
-psd_correction: none
-mfmc_hf_fraction: 0.5
-
+# Scenario costs only. Replace with comparable measured CPU-hour statistics
+# before making a production-optimality claim.
 costs:
   DSMC: 1.0
   TPMC: 0.05
   SENTMAN: 0.001
 
+field_representation:
+  quantity: Total_ForcePerArea
+  nondimensionalize: true
+  area_weighted: true
+  coordinate_frame: body_fixed
+  component_order: [x, y, z]
+  centering: pilot_dsmc_mean
+
+pilot:
+  paired_samples: 12
+reference_samples: 16
+
+field_allocation:
+  enabled: true
+  mode: bootstrap_robust
+  mean_weight: 0.25
+  second_moment_weight: 0.75
+  covariance_ridge: 1.0e-10
+  psd_floor: 0.0
+  bootstrap_repeats: 500
+  robust_quantile: 0.90
+  random_seed: 12345
+  max_enumeration_candidates: 250000
+
+allocation_constraints:
+  budget: 20.0
+  minimum_target: 2
+  minimum_counts: {}
+  maximum_counts: {}
+  min_ratios: {}
+  max_ratios:
+    TPMC: 10.0
+
+pod:
+  number_of_modes: 5
+  matrix_free: true
+  eigensolver: eigsh
+  eigensolver_tolerance: 1.0e-8
+  max_iterations: 5000
+  negative_eigenvalue_tolerance: 1.0e-10
+  clip_small_negative_eigenvalues: false
+
+validation:
+  covariance_probe_count: 100
+  covariance_probe_seed: 4401
+  compare_scalar_drag_allocation: true
+  require_disjoint_roles: true
+
+random_seed: 12345
+infeasible_policy: fail
+
 topology_tolerance:
   area_rtol: 1.0e-10
   center_atol: 1.0e-12
   normal_atol: 1.0e-12
-
-projection_residual_warning_threshold:
-  mean: 0.10
-  max: 0.30
-
-cd_reconstruction_tolerance: 1.0e-6
