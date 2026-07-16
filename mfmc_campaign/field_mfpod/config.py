@@ -59,9 +59,22 @@ def load_config(path: str | Path) -> MFPODConfig:
         raise MFPODError("pod.eigensolver_tolerance must be finite and positive")
     if "negative_eigenvalue_tolerance" in pod and (not isfinite(float(pod["negative_eigenvalue_tolerance"])) or float(pod["negative_eigenvalue_tolerance"]) < 0.0):
         raise MFPODError("pod.negative_eigenvalue_tolerance must be finite and nonnegative")
+    production = raw.get("production", {}) or {}
+    if bool(production.get("enabled", False)):
+        for key in ("geometry", "regime", "variables", "models", "maximum_counts"):
+            if not production.get(key):
+                raise MFPODError(f"production.{key} is required when production.enabled=true")
+        maximum = {str(k).upper(): int(v) for k, v in (production.get("maximum_counts", {}) or {}).items()}
+        for name in ("DSMC", *controls):
+            if maximum.get(name, 0) <= 0:
+                raise MFPODError(f"production.maximum_counts.{name} must be positive")
     archives = {k.upper(): _resolve(config_path, v) for k, v in (raw.get("fidelity_archives") or {}).items()}
     if not archives and raw.get("input_root"):
         root = _resolve(config_path, raw["input_root"]); archives = {x: root / f"{x}_surface_loads.npz" for x in ("DSMC", *controls)}
+    if bool(production.get("enabled", False)):
+        missing_archives = [name for name in ("DSMC", *controls) if name not in archives]
+        if missing_archives:
+            raise MFPODError(f"fidelity_archives is missing production models {missing_archives}")
     case = str(raw.get("case_name", "Cube-300km"))
     output_root = _resolve(config_path, raw.get("output_root", "../../paper_postprocessed/mfpod_surface_loads"))
     return MFPODConfig(config_path, raw, case, str(raw.get("geometry_id", case)), archives, output_root / case, str(raw.get("snapshot_type", "full_traction")), coordinate_frame, centering_mode, int(raw.get("random_seed", 2202)))

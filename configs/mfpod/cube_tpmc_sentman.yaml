@@ -39,6 +39,9 @@ field_allocation:
   bootstrap_repeats: 500
   robust_quantile: 0.90
   random_seed: 12345
+  adbsat_runtime:
+    source_base_dir: ADBSat-PyVersion
+    base_dir: outputs/mfpod_runtime/cube_300km/ADBSat-PyVersion
   max_enumeration_candidates: 250000
 
 allocation_constraints:
@@ -72,3 +75,171 @@ topology_tolerance:
   area_rtol: 1.0e-10
   center_atol: 1.0e-12
   normal_atol: 1.0e-12
+
+# Restartable pilot -> allocation -> solver production -> MFPOD analysis.
+# Adapter paths below are relative to the repository root; launch the command
+# from there. The allocation uses measured pilot CPU-hour costs when available.
+production:
+  enabled: true
+  backend: legacy_slurm
+  study_id: cube_300km_field_mfpod
+  random_seed: 12345
+  model_ids:
+    DSMC: PICLas_HF
+    TPMC: PICLas_TPMC
+    SENTMAN: Sentman
+  maximum_counts:
+    DSMC: 20
+    TPMC: 200
+    SENTMAN: 2000
+  geometry:
+    id: Cube
+    name: Cube
+    characteristic_length: 0.1
+    geometry_class: cube
+  regime:
+    id: CUBE_300KM
+    label: Cube representative circular orbit at 300 km
+    descriptors:
+      altitude_km: 300.0
+      characteristic_length: 0.1
+      speed_ratio: 8.0
+      freestream_temperature: 900.0
+      composition_descriptor: pymsis_hwm14_runtime
+      datetime_utc: '2013-10-21T00:00:00Z'
+      lat_deg: 0.0
+      lon_deg: 0.0
+      f107: 130.0
+      f107a: 130.0
+      ap: 18.0
+      geometry_class: bluff_body
+      surface_state: proxy_bounded
+  active_source_blocks:
+    - environment.density
+    - environment.composition
+    - environment.temperature
+    - environment.winds
+    - attitude.dispersion
+    - gsi.energy_accommodation
+    - gsi.surface_temperature
+  variables:
+    - name: density_state_scale
+      source_block: environment.density
+      distribution: {kind: normal, params: {mean: 1.0, std: 0.1}}
+      baseline: 1.0
+      bounds: [0.7, 1.5]
+    - name: density_state_temperature_offset_k
+      source_block: environment.density
+      distribution: {kind: normal, params: {mean: 0.0, std: 60.0}}
+      baseline: 0.0
+      bounds: [-200.0, 200.0]
+    - name: density_state_composition_shift
+      source_block: environment.density
+      distribution: {kind: normal, params: {mean: 0.0, std: 0.04}}
+      baseline: 0.0
+      bounds: [-0.18, 0.18]
+    - name: composition_shift
+      source_block: environment.composition
+      distribution: {kind: normal, params: {mean: 0.0, std: 0.05}}
+      baseline: 0.0
+      bounds: [-0.25, 0.25]
+    - name: temperature_offset_k
+      source_block: environment.temperature
+      distribution: {kind: normal, params: {mean: 0.0, std: 100.0}}
+      baseline: 0.0
+      bounds: [-300.0, 300.0]
+    - name: wind_east_mps
+      source_block: environment.winds
+      distribution: {kind: normal, params: {mean: 0.0, std: 75.0}}
+      baseline: 0.0
+      bounds: [-250.0, 250.0]
+    - name: wind_north_mps
+      source_block: environment.winds
+      distribution: {kind: normal, params: {mean: 0.0, std: 50.0}}
+      baseline: 0.0
+      bounds: [-250.0, 250.0]
+    - name: wind_up_mps
+      source_block: environment.winds
+      distribution: {kind: normal, params: {mean: 0.0, std: 15.0}}
+      baseline: 0.0
+      bounds: [-100.0, 100.0]
+    - name: aos_deg
+      source_block: attitude.dispersion
+      distribution: {kind: normal, params: {mean: 0.0, std: 2.0}}
+      baseline: 0.0
+      bounds: [-5.0, 5.0]
+    - name: aoa_deg
+      source_block: attitude.dispersion
+      distribution: {kind: normal, params: {mean: 0.0, std: 2.0}}
+      baseline: 0.0
+      bounds: [-5.0, 5.0]
+    - name: energy_accommodation
+      source_block: gsi.energy_accommodation
+      distribution: {kind: normal, params: {mean: 0.9, std: 0.05}}
+      baseline: 0.9
+      bounds: [0.75, 1.0]
+    - name: wall_temperature_k
+      source_block: gsi.surface_temperature
+      distribution: {kind: normal, params: {mean: 300.0, std: 25.0}}
+      baseline: 300.0
+      bounds: [250.0, 380.0]
+  sampling:
+    method: independent
+  qois: [C_D, C_D2]
+  execution:
+    backend: legacy_slurm
+    environment:
+      model: pymsis_hwm14
+      use_winds: true
+      apply_wind_to_speed: true
+    flow_zero_direction: [-1.0, 0.0, 0.0]
+  models:
+    hf:
+      id: PICLas_HF
+      kind: legacy_piclas
+      kwargs:
+        simulator_module: PICLas_prandtl
+        mpi_procs: 64
+        submission_batch_size: 10
+        surface_archive:
+          enabled: true
+          path: data/field_inputs/cube_300km/DSMC_surface_loads.npz
+          case_name: Cube-300km-TPMC-Sentman
+          fidelity: DSMC
+          geometry_id: Cube
+          regime_id: CUBE_300KM
+          append: true
+    lf:
+      - id: PICLas_TPMC
+        kind: legacy_piclas_tpmc
+        kwargs:
+          simulator_module: PICLas_prandtl
+          mpi_procs: 64
+          submission_batch_size: 10
+          surface_archive:
+            enabled: true
+            path: data/field_inputs/cube_300km/TPMC_surface_loads.npz
+            case_name: Cube-300km-TPMC-Sentman
+            fidelity: TPMC
+            geometry_id: Cube
+            regime_id: CUBE_300KM
+            append: true
+      - id: Sentman
+        kind: legacy_adbsat
+        method: Sentman
+        kwargs:
+          simulator_module: ADBSat_prandtl
+          base_dir: outputs/mfpod_runtime/cube_300km/ADBSat-PyVersion
+          cpus_per_task: 36
+          surface_archive:
+            enabled: true
+            mapping_path: data/field_inputs/cube_300km/Cube.surface_mapping.npz
+            path: data/field_inputs/cube_300km/SENTMAN_surface_loads.npz
+            case_name: Cube-300km-TPMC-Sentman
+            geometry_id: Cube
+            regime_id: CUBE_300KM
+            append: true
+    available_qois:
+      PICLas_HF: [C_D, C_D2]
+      PICLas_TPMC: [C_D, C_D2]
+      Sentman: [C_D, C_D2]

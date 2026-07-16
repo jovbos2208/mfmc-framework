@@ -1,4 +1,6 @@
 import os
+import shlex
+import sys
 import time
 import subprocess
 import numpy as np
@@ -9,7 +11,10 @@ class ADBSatSimulator:
         self.method = method
         self.base_dir = os.path.abspath(base_dir)
         if simulation_script is None:
-            simulation_script = f"python {os.path.join(self.base_dir, 'simulate.py')}"
+            simulation_script = (
+                f"{shlex.quote(os.path.abspath(sys.executable))} "
+                f"{shlex.quote(os.path.join(self.base_dir, 'simulate.py'))}"
+            )
         self.simulation_script = simulation_script
         self.job_template = job_template
         self.cpus_per_task = int(cpus_per_task)
@@ -39,11 +44,9 @@ class ADBSatSimulator:
             "cd $SLURM_SUBMIT_DIR",
             "",
             "module load gcc/12.3.0",
-            "module load python/3.10.10",
             "module load openmpi/4.1.5",
             "module load hdf5/1.12.2",
             "",
-            "source venv/bin/activate",
             f"cd {job_subdir}",
             "",
             f"{self.simulation_script} {altitude} {AoS} {input_file}",

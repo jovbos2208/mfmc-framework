@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import numpy as np
 import pytest
@@ -46,6 +47,42 @@ infeasible_policy: fail
 
 def test_inspection_reports_missing_without_fabrication(tmp_path):
     report=inspect_surface_data('Cube-300km',{'DSMC':tmp_path/'none.npz','TPMC':tmp_path/'also-none.npz'},tmp_path/'inspection'); assert not report['ready']; assert (tmp_path/'inspection'/'data_availability_report.md').exists()
+
+
+def test_explicit_production_roles_allow_dsmc_only_reference_samples(tmp_path):
+    pilot = ["p0", "p1"]
+    reference = ["r0", "r1"]
+    dsmc_production = ["x0", "x1"]
+    tpmc_production = ["x0", "x1", "x2", "x3"]
+    area = np.ones(3)
+    hp, lp = tmp_path / "DSMC.npz", tmp_path / "TPMC.npz"
+    archive(hp, "DSMC", pilot + reference + dsmc_production, area)
+    archive(lp, "TPMC", pilot + tpmc_production, area)
+    roles = tmp_path / "roles.json"
+    roles.write_text(json.dumps({
+        "pilot": pilot,
+        "reference_DSMC": reference,
+        "production": {"DSMC": dsmc_production, "TPMC": tpmc_production},
+    }), encoding="utf-8")
+    cfgp = tmp_path / "config.yaml"
+    cfgp.write_text(f"""case_name: Cube-300km
+geometry_id: cube
+high_fidelity: DSMC
+control_variates: [TPMC]
+fidelity_archives:
+  DSMC: {hp}
+  TPMC: {lp}
+output_root: {tmp_path}/out
+production:
+  roles_manifest: {roles}
+""", encoding="utf-8")
+    cfg = load_config(cfgp)
+    metadata = prepare_field_snapshots(cfg)
+    assert metadata["sample_roles"]["dsmc_reference"] == reference
+    assert metadata["production_pool_counts"] == {"DSMC": 2, "TPMC": 4}
+    with np.load(cfg.output_dir / "snapshots" / "prepared_field_snapshots.npz") as prepared:
+        assert prepared["reference_DSMC"].shape[0] == 2
+        assert prepared["production_TPMC"].shape[0] == 4
 
 
 def test_three_fidelity_field_workflow_writes_matrix_free_outputs(tmp_path):

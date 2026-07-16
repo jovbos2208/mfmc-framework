@@ -47,6 +47,13 @@ mfmc-campaign run-field-pod-mfmc configs/mfpod/cube_tpmc_sentman.yaml
 
 # Full-field, allocation-first MFMC/POD workflow
 mfmc-mfpod inspect --config configs/mfpod/cube_tpmc_sentman.yaml
+mfmc-mfpod production --config configs/mfpod/cube_tpmc_sentman.yaml --dry-run
+mfmc-mfpod production --config configs/mfpod/cube_tpmc_sentman.yaml
+mfmc-mfpod production-status --config configs/mfpod/cube_tpmc_sentman.yaml
+# After an interruption, continue without resubmitting archived sample IDs:
+mfmc-mfpod production --config configs/mfpod/cube_tpmc_sentman.yaml --resume
+
+# Analysis-only commands for archives that already exist
 mfmc-mfpod prepare-field-snapshots --config configs/mfpod/cube_tpmc_sentman.yaml
 mfmc-mfpod field-pilot --config configs/mfpod/cube_tpmc_sentman.yaml
 mfmc-mfpod optimal-allocation --config configs/mfpod/cube_tpmc_sentman.yaml
@@ -66,6 +73,10 @@ mfmc-campaign build-adbsat-surface \
 The MFPOD templates expect archives below `data/field_inputs/<case>/` and
 write generated results below `outputs/`. The archive format and conservative
 Sentman mapping are documented in [docs/field_pod_mfmc.md](docs/field_pod_mfmc.md).
+The `production` command owns the persisted sample plan, paired pilots,
+pilot-cost allocation, nested production streams, DSMC-only reference set,
+and final analysis. Run it from the repository root because solver paths in
+the production template are repository-relative.
 
 ## Cluster Deployment
 

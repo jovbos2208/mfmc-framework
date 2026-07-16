@@ -113,10 +113,109 @@ def _load_field_batches(cfg: MFPODConfig):
     return models, batches, topology
 
 
+def _production_roles_path(cfg: MFPODConfig) -> Path | None:
+    value = (cfg.raw.get("production", {}) or {}).get("roles_manifest")
+    if not value:
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        path = (cfg.path.parent / path).resolve()
+    return path
+
+
+def _prepare_explicit_field_snapshots(cfg: MFPODConfig, models, batches, topology, roles_path: Path) -> dict:
+    roles = json.loads(roles_path.read_text(encoding="utf-8"))
+    pilot_ids = [str(value) for value in roles.get("pilot", [])]
+    reference_ids = [str(value) for value in roles.get("reference_DSMC", [])]
+    production_by_model = {
+        str(name).upper(): [str(value) for value in values]
+        for name, values in (roles.get("production", {}) or {}).items()
+    }
+    if not pilot_ids or not reference_ids or "DSMC" not in production_by_model:
+        raise MFPODError("Production roles require pilot, reference_DSMC, and production.DSMC ids")
+    id_lookup = {
+        name: {str(sample_id): index for index, sample_id in enumerate(batch.sample_ids)}
+        for name, batch in batches.items()
+    }
+    for name in models:
+        required = pilot_ids + production_by_model.get(name, [])
+        missing = [sample_id for sample_id in required if sample_id not in id_lookup[name]]
+        if missing:
+            raise MFPODError(f"{name} archive is missing explicit role ids {missing[:5]}")
+    missing_reference = [sample_id for sample_id in reference_ids if sample_id not in id_lookup["DSMC"]]
+    if missing_reference:
+        raise MFPODError(f"DSMC archive is missing reference ids {missing_reference[:5]}")
+    if set(pilot_ids) & set(reference_ids):
+        raise MFPODError("Pilot and DSMC reference roles overlap")
+    all_production = set().union(*(set(values) for values in production_by_model.values()))
+    if (set(pilot_ids) | set(reference_ids)) & all_production:
+        raise MFPODError("Pilot/reference and production roles overlap")
+    dsmc_stream = production_by_model["DSMC"]
+    for name in models[1:]:
+        stream = production_by_model.get(name, [])
+        if stream and stream[: len(dsmc_stream)] != dsmc_stream:
+            raise MFPODError(f"{name} production ids do not preserve the nested DSMC prefix")
+
+    payload: dict[str, np.ndarray] = {
+        "pilot_sample_ids": np.asarray(pilot_ids),
+        "reference_sample_ids": np.asarray(reference_ids),
+        "production_paired_sample_ids": np.asarray(dsmc_stream),
+    }
+    pool_counts = {}
+    for name in models:
+        pilot_rows = [id_lookup[name][sample_id] for sample_id in pilot_ids]
+        production_ids = production_by_model.get(name, [])
+        production_rows = [id_lookup[name][sample_id] for sample_id in production_ids]
+        payload[f"pilot_{name}"] = batches[name].values[pilot_rows]
+        payload[f"pilot_CD_{name}"] = np.asarray([
+            batches[name].values[index] @ drag_functional(batches[name].geometry, batches[name].u_hat_inf[index])
+            for index in pilot_rows
+        ])
+        payload[f"production_{name}"] = batches[name].values[production_rows]
+        payload[f"production_ids_{name}"] = np.asarray(production_ids)
+        payload[f"production_CD_{name}"] = np.asarray([
+            batches[name].values[index] @ drag_functional(batches[name].geometry, batches[name].u_hat_inf[index])
+            for index in production_rows
+        ])
+        pool_counts[name] = len(production_rows)
+    reference_rows = [id_lookup["DSMC"][sample_id] for sample_id in reference_ids]
+    payload["reference_DSMC"] = batches["DSMC"].values[reference_rows]
+    geometry = batches["DSMC"].geometry
+    payload.update({
+        "face_area": geometry.face_area,
+        "A_ref": np.asarray([geometry.A_ref]),
+        "face_center": np.empty((0, 3)) if geometry.face_center is None else geometry.face_center,
+        "face_normal": np.empty((0, 3)) if geometry.face_normal is None else geometry.face_normal,
+    })
+    out = cfg.output_dir / "snapshots"
+    out.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out / "prepared_field_snapshots.npz", **payload)
+    metadata = {
+        "case": cfg.case_name,
+        "models": models,
+        "snapshot_type": "full_traction",
+        "coordinate_frame": cfg.coordinate_frame,
+        "centering": "pilot_dsmc_mean",
+        "sample_roles": {"pilot": pilot_ids, "dsmc_reference": reference_ids, "production": production_by_model},
+        "production_pool_counts": pool_counts,
+        "topology": topology,
+        "random_seed": cfg.random_seed,
+        "disjoint_roles": True,
+        "roles_manifest": str(roles_path),
+    }
+    _write_json(out / "field_snapshot_metadata.json", metadata)
+    return metadata
+
+
 def prepare_field_snapshots(cfg: MFPODConfig) -> dict:
     """Create disjoint paired pilot/reference roles and nested production pools."""
 
     models, batches, topology = _load_field_batches(cfg)
+    roles_path = _production_roles_path(cfg)
+    if roles_path is not None:
+        if not roles_path.is_file():
+            raise MFPODError(f"Production roles manifest not found: {roles_path}")
+        return _prepare_explicit_field_snapshots(cfg, models, batches, topology, roles_path)
     id_lookup = {
         name: {str(sample_id): index for index, sample_id in enumerate(batch.sample_ids)}
         for name, batch in batches.items()

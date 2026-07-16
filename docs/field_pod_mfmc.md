@@ -71,6 +71,56 @@ python3 -m mfmc_campaign.cli run-field-pod-mfmc configs/studies/vleo_mfmc_paper/
 `check-field-data` writes `data_availability_report.json` and, when required
 fields are missing, `field_pod_mfmc_missing_data_<case>.md`.
 
+## Restartable Solver Production
+
+The Cube template contains a production definition for DSMC, TPMC and Sentman.
+From the repository root, first inspect the deterministic plan without
+submitting jobs:
+
+```bash
+mfmc-mfpod production \
+  --config configs/mfpod/cube_tpmc_sentman.yaml \
+  --dry-run
+```
+
+Then launch all stages:
+
+```bash
+mfmc-mfpod production --config configs/mfpod/cube_tpmc_sentman.yaml
+```
+
+The command runs paired pilots at every fidelity, replaces the scenario costs
+with finite positive pilot mean CPU-hour costs, solves the full-field integer
+allocation, evaluates the allocated nested production streams, evaluates a
+separate DSMC reference set, and runs the field estimator, matrix-free POD and
+benchmark. Its persistent files are below
+`outputs/field_pod_mfmc_three_fidelity/<case>/production/`:
+
+- `sample_plan.json`: immutable samples, IDs and disjoint role streams
+- `state.json`: completed stages, measured costs and submitted counts
+- `roles.json`: exact pilot/reference/production IDs used by analysis
+
+An interrupted run is resumed with:
+
+```bash
+mfmc-mfpod production \
+  --config configs/mfpod/cube_tpmc_sentman.yaml \
+  --resume
+```
+
+Existing archive IDs are checked before submission, so completed samples are
+not submitted again. Use `--stop-after pilot`, `allocation`, or `production`
+to create deliberate checkpoints, and inspect them with
+`mfmc-mfpod production-status --config ...`.
+
+Before the first real run, install `piclas` and `piclas2vtk` with
+`scripts/configure_piclas.sh`. If the Sentman mapping is absent, production
+runs the PICLAS pilot first, builds the mapping from its first DSMC VTU, and
+then continues with Sentman. Generated OBJ/MAT assets live in the ignored
+`outputs/mfpod_runtime/` copy, leaving tracked ADBSat assets unchanged. The
+manual mapping procedure below remains useful when selecting a different
+trusted canonical VTU.
+
 ## Canonical ADBSat Surface
 
 Build the ADBSat OBJ, MAT and immutable triangle-to-PICLAS-cell mapping from one
