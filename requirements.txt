@@ -1,0 +1,9 @@
+numpy
+pandas
+scipy
+meshio
+matplotlib
+glob2
+mplcursors
+mpi4py
+PyYAML
