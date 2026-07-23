@@ -26,8 +26,11 @@ field_representation:
   centering: pilot_dsmc_mean
 
 pilot:
-  paired_samples: 12
-reference_samples: 16
+  # Independent, fully paired DSMC/TPMC/Sentman fields used only to estimate
+  # costs, Hilbert-space covariance blocks, weights, and allocations.
+  paired_samples: 30
+# Independent DSMC-only truth set used only by the final validation.
+reference_samples: 50
 
 field_allocation:
   enabled: true
@@ -42,7 +45,8 @@ field_allocation:
   max_enumeration_candidates: 250000
 
 allocation_constraints:
-  budget: 20.0
+  # Resolved after the pilot as 20 times the measured mean DSMC CPU-hour cost.
+  budget_hf_equivalent: 20.0
   minimum_target: 2
   minimum_counts: {}
   maximum_counts: {}
@@ -64,6 +68,9 @@ validation:
   covariance_probe_seed: 4401
   compare_scalar_drag_allocation: true
   require_disjoint_roles: true
+  fixed_ratios:
+    TPMC: 5.0
+    SENTMAN: 50.0
 
 random_seed: 12345
 infeasible_policy: fail
@@ -73,7 +80,8 @@ topology_tolerance:
   center_atol: 1.0e-12
   normal_atol: 1.0e-12
 
-# Restartable pilot -> allocation -> solver production -> MFPOD analysis.
+# Restartable paired pilot -> full-field allocation -> solver production ->
+# DSMC-target MFMC covariance and POD analysis.
 # Adapter paths below are relative to the repository root; launch the command
 # from there. The allocation uses measured pilot CPU-hour costs when available.
 production:

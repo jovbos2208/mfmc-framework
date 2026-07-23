@@ -547,19 +547,65 @@ def field_pod(cfg: MFPODConfig) -> dict:
     }
 
 
-def field_benchmark(cfg: MFPODConfig) -> dict:
-    """Run the predeclared equal-cost full-field allocation comparison."""
+def _pilot_drag_arrays(
+    cfg: MFPODConfig, configured_models: tuple[str, ...]
+) -> dict[str, np.ndarray]:
+    """Load scalar drag responses paired with the full-field pilot rows."""
 
+    settings = cfg.raw.get("field_allocation", cfg.raw.get("allocation_optimization", {})) or {}
+    archive = settings.get("pilot_field_archive", settings.get("pilot_response_archive"))
+    if archive:
+        path = Path(archive)
+        if not path.is_absolute():
+            path = (cfg.path.parent / path).resolve()
+        with np.load(path, allow_pickle=False) as data:
+            fields = {
+                name: np.asarray(data[f"CD_{name}"], dtype=float).reshape(-1)
+                for name in configured_models
+                if f"CD_{name}" in data.files
+            }
+        return fields
     prepared = _load_prepared_fields(cfg)
+    return {
+        name: np.asarray(prepared[f"pilot_CD_{name}"], dtype=float).reshape(-1)
+        for name in configured_models
+        if f"pilot_CD_{name}" in prepared.files
+    }
+
+
+def field_comparison_allocations(
+    cfg: MFPODConfig,
+    *,
+    maximum_counts: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Plan every equal-cost allocation before solver production.
+
+    The returned allocations are all computed from the same paired pilot data.
+    Production uses their component-wise maximum so the later benchmark never
+    truncates a comparator merely because its required samples were not run.
+    """
+
     pilot_fields, _ = _field_pilot_arrays(cfg)
     configured_models = tuple(name for name in _configured_models(cfg) if name in pilot_fields)
-    production_fields = {
-        name: np.asarray(prepared[f"production_{name}"], dtype=float) for name in configured_models
-    }
     costs = {str(name).upper(): float(value) for name, value in (cfg.raw.get("costs", {}) or {}).items()}
     settings = cfg.raw.get("field_allocation", {}) or {}
     constraints = cfg.raw.get("allocation_constraints", {}) or {}
-    maximum_counts = {name: production_fields[name].shape[0] for name in configured_models}
+    if maximum_counts is None:
+        configured_maximum = {
+            str(name).upper(): int(value)
+            for name, value in (constraints.get("maximum_counts", {}) or {}).items()
+        }
+        if configured_maximum:
+            maximum_counts = configured_maximum
+        else:
+            prepared = _load_prepared_fields(cfg)
+            maximum_counts = {
+                name: int(prepared[f"production_{name}"].shape[0])
+                for name in configured_models
+            }
+    maximum_counts = {
+        name: int(maximum_counts[name]) for name in configured_models
+    }
     base_options = dict(
         budget=float(constraints.get("budget", 20.0)),
         target="DSMC",
@@ -595,6 +641,7 @@ def field_benchmark(cfg: MFPODConfig) -> dict:
         except MFPODError:
             if mode != "enumeration":
                 raise
+
     if "TPMC" in configured_models:
         two_maximum = {name: maximum_counts[name] for name in ("DSMC", "TPMC")}
         allocations["two-fidelity-TPMC"] = optimize_field_allocation(
@@ -616,20 +663,21 @@ def field_benchmark(cfg: MFPODConfig) -> dict:
     n_h_only = min(
         maximum_counts["DSMC"], int(np.floor(base_options["budget"] / costs["DSMC"]))
     )
-    exact_options = AllocationOptions(
-        **{
-            **base_options,
-            "minimum_target": n_h_only,
-            "maximum_counts": {"DSMC": n_h_only},
-            "minimum_counts": {},
-            "min_ratios": {},
-            "max_ratios": {},
-            "mode": "enumeration",
-            "bootstrap_repeats": 0,
-        }
-    )
     allocations["DSMC-only"] = optimize_field_allocation(
-        {"DSMC": pilot_fields["DSMC"]}, {"DSMC": costs["DSMC"]}, exact_options
+        {"DSMC": pilot_fields["DSMC"]},
+        {"DSMC": costs["DSMC"]},
+        AllocationOptions(
+            **{
+                **base_options,
+                "minimum_target": n_h_only,
+                "maximum_counts": {"DSMC": n_h_only},
+                "minimum_counts": {},
+                "min_ratios": {},
+                "max_ratios": {},
+                "mode": "enumeration",
+                "bootstrap_repeats": 0,
+            }
+        ),
     )
 
     configured_ratios = (cfg.raw.get("validation", {}) or {}).get(
@@ -639,9 +687,14 @@ def field_benchmark(cfg: MFPODConfig) -> dict:
     for n_h in range(base_options["minimum_target"], maximum_counts["DSMC"] + 1):
         trial = {"DSMC": n_h}
         for name in configured_models[1:]:
-            trial[name] = max(n_h, int(np.ceil(float(configured_ratios.get(name, 1.0)) * n_h)))
+            trial[name] = max(
+                n_h, int(np.ceil(float(configured_ratios.get(name, 1.0)) * n_h))
+            )
         trial_cost = sum(trial[name] * costs[name] for name in trial)
-        if trial_cost <= base_options["budget"] and all(trial[name] <= maximum_counts[name] for name in trial):
+        if (
+            trial_cost <= base_options["budget"]
+            and all(trial[name] <= maximum_counts[name] for name in trial)
+        ):
             fixed_counts = trial
     if fixed_counts is not None:
         fixed_cost = sum(fixed_counts[name] * costs[name] for name in fixed_counts)
@@ -664,14 +717,27 @@ def field_benchmark(cfg: MFPODConfig) -> dict:
         )
 
     if bool((cfg.raw.get("validation", {}) or {}).get("compare_scalar_drag_allocation", True)):
-        drag_fields = {
-            name: np.asarray(prepared[f"pilot_CD_{name}"], dtype=float) for name in configured_models
-        }
-        drag_result = optimize_allocation(
-            drag_fields,
-            {name: costs[name] for name in configured_models},
-            AllocationOptions(**{**base_options, "mode": "enumeration", "bootstrap_repeats": 0}),
-        )
+        drag_fields = _pilot_drag_arrays(cfg, configured_models)
+        if set(drag_fields) != set(configured_models):
+            missing = sorted(set(configured_models) - set(drag_fields))
+            raise MFPODError(
+                f"Scalar-drag allocation requires paired pilot C_D responses for {missing}"
+            )
+        drag_options = {**base_options, "mode": "enumeration", "bootstrap_repeats": 0}
+        try:
+            drag_result = optimize_allocation(
+                drag_fields,
+                {name: costs[name] for name in configured_models},
+                AllocationOptions(**drag_options),
+            )
+        except MFPODError as exc:
+            if "exceeds max_enumeration_candidates" not in str(exc):
+                raise
+            drag_result = optimize_allocation(
+                drag_fields,
+                {name: costs[name] for name in configured_models},
+                AllocationOptions(**{**drag_options, "mode": "continuous_round"}),
+            )
         locked = {
             **base_options,
             "minimum_target": drag_result.counts["DSMC"],
@@ -688,6 +754,44 @@ def field_benchmark(cfg: MFPODConfig) -> dict:
             {name: costs[name] for name in drag_result.counts},
             AllocationOptions(**locked),
         )
+    return allocations
+
+
+def field_benchmark(cfg: MFPODConfig) -> dict:
+    """Run the predeclared equal-cost full-field allocation comparison."""
+
+    prepared = _load_prepared_fields(cfg)
+    pilot_fields, _ = _field_pilot_arrays(cfg)
+    configured_models = tuple(name for name in _configured_models(cfg) if name in pilot_fields)
+    production_fields = {
+        name: np.asarray(prepared[f"production_{name}"], dtype=float) for name in configured_models
+    }
+    costs = {str(name).upper(): float(value) for name, value in (cfg.raw.get("costs", {}) or {}).items()}
+    constraints = cfg.raw.get("allocation_constraints", {}) or {}
+    configured_maximum = {
+        str(name).upper(): int(value)
+        for name, value in (constraints.get("maximum_counts", {}) or {}).items()
+    }
+    maximum_counts = configured_maximum or {
+        name: production_fields[name].shape[0] for name in configured_models
+    }
+    allocations = field_comparison_allocations(cfg, maximum_counts=maximum_counts)
+    required_counts = {
+        name: max(
+            allocation.counts.get(name, 0) for allocation in allocations.values()
+        )
+        for name in configured_models
+    }
+    missing = {
+        name: required_counts[name] - production_fields[name].shape[0]
+        for name in configured_models
+        if production_fields[name].shape[0] < required_counts[name]
+    }
+    if missing:
+        raise MFPODError(
+            f"Production pools are too small for the predeclared equal-cost comparisons: {missing}"
+        )
+    base_budget = float(constraints.get("budget", 20.0))
 
     reference_fields = np.asarray(prepared["reference_DSMC"], dtype=float)
     pilot_statistics_path = cfg.output_dir / "pilot" / "field_pilot_statistics.npz"
@@ -742,7 +846,7 @@ def field_benchmark(cfg: MFPODConfig) -> dict:
                 "method": method,
                 **{f"n_{name}": count for name, count in allocation.counts.items()},
                 "total_cost": allocation.total_cost,
-                "unused_budget": base_options["budget"] - allocation.total_cost,
+                "unused_budget": base_budget - allocation.total_cost,
                 "mean_field_relative_error": relative_field_error(estimate.mean_field, reference_statistics.mean_field),
                 "covariance_probe_relative_error": covariance_probe_error(
                     estimate.covariance,
@@ -763,7 +867,7 @@ def field_benchmark(cfg: MFPODConfig) -> dict:
     _write_json(
         out / "benchmark_metadata.json",
         {
-            "equal_configured_budget": base_options["budget"],
+            "equal_configured_budget": base_budget,
             "pilot_cost_included": False,
             "reference_sample_count": int(reference_fields.shape[0]),
             "methods": list(allocations),

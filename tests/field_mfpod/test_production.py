@@ -3,11 +3,14 @@ import sys
 import types
 
 import numpy as np
+import pytest
 import yaml
 
 from mfmc_campaign.adapters import LegacyPiclasAdapter
 from mfmc_campaign.field_mfpod.config import load_config
+from mfmc_campaign.field_mfpod.models import MFPODError
 from mfmc_campaign.field_mfpod.production import (
+    _runtime_config,
     _run_piclas_workloads,
     production_status,
     run_production,
@@ -86,6 +89,35 @@ def test_production_dry_run_writes_deterministic_nested_plan_and_state(tmp_path)
     assert len(plan["sample_ids"]) == 9
     assert plan["roles"]["production_stream"][:3] != plan["roles"]["pilot"]
     assert state["status"] == "planned"
+
+
+def test_existing_sample_plan_rejects_changed_role_counts(tmp_path):
+    path = tmp_path / "production.yaml"
+    configured = production_config(tmp_path)
+    path.write_text(yaml.safe_dump(configured), encoding="utf-8")
+    run_production(load_config(path), dry_run=True)
+    configured["pilot"]["paired_samples"] = 3
+    path.write_text(yaml.safe_dump(configured), encoding="utf-8")
+    with pytest.raises(MFPODError, match="immutable sample_plan"):
+        production_status(load_config(path))
+
+
+def test_hf_equivalent_budget_uses_measured_pilot_dsmc_cost(tmp_path):
+    path = tmp_path / "production.yaml"
+    configured = production_config(tmp_path)
+    configured["allocation_constraints"] = {
+        "budget_hf_equivalent": 20.0,
+    }
+    path.write_text(yaml.safe_dump(configured), encoding="utf-8")
+    cfg = load_config(path)
+    runtime = _runtime_config(
+        cfg,
+        cfg.raw["production"],
+        tmp_path / "pilot_fields.npz",
+        measured_costs={"DSMC": 2.5, "TPMC": 0.1},
+    )
+    assert runtime.raw["allocation_constraints"]["budget"] == 50.0
+    assert runtime.raw["costs"]["DSMC"] == 2.5
 
 
 def test_piclas_workloads_are_all_submitted_before_sequential_collection(tmp_path):

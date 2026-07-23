@@ -73,6 +73,8 @@ mfmc-campaign build-adbsat-surface \
 The MFPOD templates expect archives below `data/field_inputs/<case>/` and
 write generated results below `outputs/`. The archive format and conservative
 Sentman mapping are documented in [docs/field_pod_mfmc.md](docs/field_pod_mfmc.md).
+The checkpoint-by-checkpoint cluster procedure is documented in
+[docs/mfpod_cluster_runbook.md](docs/mfpod_cluster_runbook.md).
 The `production` command owns the persisted sample plan, paired pilots,
 pilot-cost allocation, nested production streams, DSMC-only reference set,
 and final analysis. Run it from the repository root because solver paths in

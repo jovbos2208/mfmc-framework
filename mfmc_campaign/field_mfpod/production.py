@@ -22,7 +22,12 @@ from ..sampling import InputModel, SamplingContext
 from .config import MFPODConfig
 from .models import MFPODError, jsonable
 from .snapshots import PICLASIdentitySurfaceAdapter
-from .workflow import field_pilot, optimal_allocation, run_all
+from .workflow import (
+    field_comparison_allocations,
+    field_pilot,
+    optimal_allocation,
+    run_all,
+)
 
 
 _STAGES = ("plan", "pilot", "allocation", "production", "analysis")
@@ -79,11 +84,33 @@ def _maximum_counts(cfg: MFPODConfig, settings: dict[str, Any]) -> dict[str, int
 def _sample_plan(cfg: MFPODConfig, settings: dict[str, Any]) -> dict[str, Any]:
     production_dir = cfg.output_dir / "production"
     path = production_dir / "sample_plan.json"
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
     pilot_count = int(cfg.raw.get("pilot", {}).get("paired_samples", 12))
     reference_count = int(cfg.raw.get("reference_samples", 16))
     maximum = _maximum_counts(cfg, settings)
+    if path.exists():
+        plan = json.loads(path.read_text(encoding="utf-8"))
+        planned = {
+            "pilot": len((plan.get("roles", {}) or {}).get("pilot", [])),
+            "reference_DSMC": len((plan.get("roles", {}) or {}).get("reference_DSMC", [])),
+            "maximum_counts": {
+                str(name).upper(): int(value)
+                for name, value in (plan.get("maximum_counts", {}) or {}).items()
+            },
+            "random_seed": int(plan.get("random_seed", -1)),
+        }
+        configured = {
+            "pilot": pilot_count,
+            "reference_DSMC": reference_count,
+            "maximum_counts": maximum,
+            "random_seed": int(settings.get("random_seed", cfg.random_seed)),
+        }
+        if planned != configured:
+            raise MFPODError(
+                "Existing immutable sample_plan.json does not match the current "
+                f"configuration: planned={planned}, configured={configured}. "
+                "Use a new case_name/output_root for the changed scientific design."
+            )
+        return plan
     stream_count = max(maximum.values())
     total = pilot_count + reference_count + stream_count
     rng = np.random.default_rng(int(settings.get("random_seed", cfg.random_seed)))
@@ -373,7 +400,10 @@ def _pilot_archive(cfg: MFPODConfig, pilot_ids: list[str]) -> Path:
         missing = [sample_id for sample_id in pilot_ids if sample_id not in lookup]
         if missing:
             raise MFPODError(f"{fidelity} pilot archive is missing {missing[:5]}")
-        payload[fidelity] = batch.values[[lookup[sample_id] for sample_id in pilot_ids]]
+        rows = [lookup[sample_id] for sample_id in pilot_ids]
+        payload[fidelity] = batch.values[rows]
+        drag = adapter.load_batch(cfg.case_name, fidelity, "drag_contribution")
+        payload[f"CD_{fidelity}"] = np.sum(drag.values[rows], axis=1)
     path = cfg.output_dir / "production" / "pilot_fields.npz"
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(path, **payload)
@@ -397,6 +427,14 @@ def _runtime_config(
             **{str(name).upper(): float(value) for name, value in (raw.get("costs", {}) or {}).items()},
             **{str(name).upper(): float(value) for name, value in measured_costs.items()},
         }
+    budget_hf_equivalent = constraints.get("budget_hf_equivalent")
+    if budget_hf_equivalent is not None:
+        hf_cost = float((raw.get("costs", {}) or {}).get("DSMC", 0.0))
+        if hf_cost <= 0.0:
+            raise MFPODError(
+                "allocation_constraints.budget_hf_equivalent requires a positive DSMC cost"
+            )
+        constraints["budget"] = float(budget_hf_equivalent) * hf_cost
     production = raw.setdefault("production", {})
     if roles_path is not None:
         production["roles_manifest"] = str(roles_path)
@@ -408,11 +446,31 @@ def production_status(cfg: MFPODConfig) -> dict[str, Any]:
     plan = _sample_plan(cfg, settings)
     state_path = cfg.output_dir / "production" / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    completed = list(state.get("completed_stages", []))
+    if not completed:
+        next_action = "run paired pilot"
+    elif "allocation" not in completed:
+        next_action = "compute pilot statistics and review allocation"
+    elif "production" not in completed:
+        next_action = "review required_production_counts, then run production"
+    elif "analysis" not in completed:
+        next_action = "run full-field MFMC estimator, matrix-free POD, and benchmarks"
+    else:
+        next_action = "complete"
     return {
         "case": cfg.case_name,
         "state": state,
         "archives": {name: {"path": str(path), "samples": len(_archive_ids(path))} for name, path in cfg.archives.items()},
         "planned": {"pilot": len(plan["roles"]["pilot"]), "reference_DSMC": len(plan["roles"]["reference_DSMC"]), "maximum_counts": plan["maximum_counts"]},
+        "next_action": next_action,
+        "artifacts": {
+            "pilot_statistics": str(cfg.output_dir / "pilot" / "field_pilot_statistics.json"),
+            "primary_allocation": str(cfg.output_dir / "allocation" / "optimal_allocation.json"),
+            "state": str(state_path),
+            "roles": str(cfg.output_dir / "production" / "roles.json"),
+            "pod": str(cfg.output_dir / "pod" / "full_field_modes.npz"),
+            "benchmark": str(cfg.output_dir / "benchmark" / "benchmark_summary.csv"),
+        },
     }
 
 
@@ -500,18 +558,62 @@ def run_production(
         **measured_costs,
     }
     runtime_cfg = _runtime_config(cfg, settings, pilot_archive, measured_costs=measured_costs)
+    state["allocation_budget"] = {
+        "hf_equivalent": (runtime_cfg.raw.get("allocation_constraints", {}) or {}).get(
+            "budget_hf_equivalent"
+        ),
+        "resolved_cost": (runtime_cfg.raw.get("allocation_constraints", {}) or {}).get(
+            "budget"
+        ),
+        "unit": "CPU-hours when pilot model costs are measured CPU-hours",
+    }
     if "allocation" not in state["completed_stages"]:
         field_pilot(runtime_cfg)
         allocation = optimal_allocation(runtime_cfg)
         state["allocation"] = allocation
+        comparison_allocations = field_comparison_allocations(
+            runtime_cfg,
+            maximum_counts=_maximum_counts(cfg, settings),
+        )
+        state["comparison_allocations"] = {
+            name: result.as_dict() for name, result in comparison_allocations.items()
+        }
+        state["required_production_counts"] = {
+            fidelity: max(
+                result.counts.get(fidelity, 0)
+                for result in comparison_allocations.values()
+            )
+            for fidelity in model_ids
+        }
         state["completed_stages"].append("allocation")
         _write_json(state_path, state)
     else:
         allocation = state["allocation"]
+        if "required_production_counts" not in state:
+            comparison_allocations = field_comparison_allocations(
+                runtime_cfg,
+                maximum_counts=_maximum_counts(cfg, settings),
+            )
+            state["comparison_allocations"] = {
+                name: result.as_dict() for name, result in comparison_allocations.items()
+            }
+            state["required_production_counts"] = {
+                fidelity: max(
+                    result.counts.get(fidelity, 0)
+                    for result in comparison_allocations.values()
+                )
+                for fidelity in model_ids
+            }
+            _write_json(state_path, state)
     if stop_after == "allocation":
         return production_status(cfg)
 
-    counts = {str(name).upper(): int(value) for name, value in allocation["counts"].items() if int(value) > 0}
+    planned_counts = state.get("required_production_counts", allocation["counts"])
+    counts = {
+        str(name).upper(): int(value)
+        for name, value in planned_counts.items()
+        if int(value) > 0
+    }
     production_stream = list(plan["roles"]["production_stream"])
     if "production" not in state["completed_stages"]:
         runs = []

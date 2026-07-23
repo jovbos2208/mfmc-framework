@@ -10,7 +10,10 @@ from mfmc_campaign.field_mfpod.allocation import (
 )
 from mfmc_campaign.field_mfpod.models import MFPODError
 from mfmc_campaign.field_mfpod.config import load_config
-from mfmc_campaign.field_mfpod.workflow import optimal_allocation
+from mfmc_campaign.field_mfpod.workflow import (
+    field_comparison_allocations,
+    optimal_allocation,
+)
 
 
 def scalar_pilot(seed=4, n=500, sentman_noise=0.35):
@@ -205,3 +208,60 @@ def test_yaml_workflow_writes_allocation_diagnostics_and_candidate_tables(tmp_pa
     assert (out / "optimal_allocation.json").exists()
     assert (out / "optimal_allocation_candidates.csv").exists()
     assert (out / "allocation_strategy_comparison.csv").exists()
+
+
+def test_external_pilot_plans_union_for_equal_cost_comparators(tmp_path):
+    pilot = scalar_pilot(n=80)
+    fields = {
+        name: np.column_stack((values, values * values))
+        for name, values in pilot.items()
+    }
+    archive = tmp_path / "pilot_fields.npz"
+    np.savez(
+        archive,
+        **fields,
+        **{f"CD_{name}": values for name, values in pilot.items()},
+    )
+    config = {
+        "case_name": "comparison-union-test",
+        "output_root": str(tmp_path / "out"),
+        "high_fidelity": "DSMC",
+        "control_variates": ["TPMC", "SENTMAN"],
+        "costs": {"DSMC": 1.0, "TPMC": 0.2, "SENTMAN": 0.05},
+        "field_allocation": {
+            "pilot_field_archive": str(archive),
+            "mode": "continuous_round",
+            "bootstrap_repeats": 0,
+            "mean_weight": 0.25,
+            "second_moment_weight": 0.75,
+        },
+        "allocation_constraints": {
+            "budget": 8.0,
+            "minimum_target": 2,
+            "maximum_counts": {"DSMC": 8, "TPMC": 30, "SENTMAN": 60},
+            "max_ratios": {"TPMC": 10.0},
+        },
+        "validation": {
+            "compare_scalar_drag_allocation": True,
+            "fixed_ratios": {"TPMC": 5.0, "SENTMAN": 10.0},
+        },
+    }
+    path = tmp_path / "study.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    allocations = field_comparison_allocations(
+        load_config(path),
+        maximum_counts=config["allocation_constraints"]["maximum_counts"],
+    )
+    assert {
+        "DSMC-only",
+        "two-fidelity-TPMC",
+        "fixed-ratios",
+        "scalar-drag-allocation",
+    } <= set(allocations)
+    required = {
+        name: max(result.counts.get(name, 0) for result in allocations.values())
+        for name in ("DSMC", "TPMC", "SENTMAN")
+    }
+    assert required["DSMC"] == 8
+    assert required["TPMC"] >= 8
+    assert required["SENTMAN"] >= 8

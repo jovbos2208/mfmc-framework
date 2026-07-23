@@ -50,10 +50,17 @@ def load_config(path: str | Path) -> MFPODConfig:
     if representation and (not bool(representation.get("nondimensionalize", True)) or not bool(representation.get("area_weighted", True))):
         raise MFPODError("Full-field allocation requires nondimensionalized, area-weighted snapshots")
     allocation = raw.get("field_allocation", raw.get("allocation_optimization", {})) or {}
+    constraints = raw.get("allocation_constraints", {}) or {}
     mean_weight = float(allocation.get("mean_weight", 0.25))
     second_weight = float(allocation.get("second_moment_weight", 0.75))
     if not isfinite(mean_weight) or not isfinite(second_weight) or mean_weight < 0.0 or second_weight < 0.0 or not abs(mean_weight + second_weight - 1.0) <= 1.0e-12:
         raise MFPODError("field allocation weights must be nonnegative and sum to one")
+    if "budget_hf_equivalent" in constraints:
+        budget_hf_equivalent = float(constraints["budget_hf_equivalent"])
+        if not isfinite(budget_hf_equivalent) or budget_hf_equivalent <= 0.0:
+            raise MFPODError(
+                "allocation_constraints.budget_hf_equivalent must be finite and positive"
+            )
     pod = raw.get("pod", {}) or {}
     if "eigensolver_tolerance" in pod and (not isfinite(float(pod["eigensolver_tolerance"])) or float(pod["eigensolver_tolerance"]) <= 0.0):
         raise MFPODError("pod.eigensolver_tolerance must be finite and positive")

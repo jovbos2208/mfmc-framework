@@ -26,8 +26,11 @@ field_representation:
   centering: pilot_dsmc_mean
 
 pilot:
-  paired_samples: 12
-reference_samples: 16
+  # Independent, fully paired DSMC/TPMC/Sentman fields used only to estimate
+  # costs, Hilbert-space covariance blocks, weights, and allocations.
+  paired_samples: 30
+# Independent DSMC-only truth set used only by the final validation.
+reference_samples: 50
 
 field_allocation:
   enabled: true
@@ -42,7 +45,8 @@ field_allocation:
   max_enumeration_candidates: 250000
 
 allocation_constraints:
-  budget: 20.0
+  # Resolved after the pilot as 20 times the measured mean DSMC CPU-hour cost.
+  budget_hf_equivalent: 20.0
   minimum_target: 2
   minimum_counts: {}
   maximum_counts: {}
@@ -64,6 +68,9 @@ validation:
   covariance_probe_seed: 4401
   compare_scalar_drag_allocation: true
   require_disjoint_roles: true
+  fixed_ratios:
+    TPMC: 5.0
+    SENTMAN: 50.0
 
 random_seed: 12345
 infeasible_policy: fail
@@ -72,3 +79,179 @@ topology_tolerance:
   area_rtol: 1.0e-10
   center_atol: 1.0e-12
   normal_atol: 1.0e-12
+
+# Restartable paired pilot -> pilot statistics/costs -> allocation union ->
+# nested solver production -> full-field MFMC covariance/POD.
+production:
+  enabled: true
+  backend: legacy_slurm
+  study_id: goce_244km_field_mfpod
+  random_seed: 12345
+  adbsat_runtime:
+    source_base_dir: ADBSat-PyVersion
+    base_dir: outputs/mfpod_runtime/goce_244km/ADBSat-PyVersion
+  model_ids:
+    DSMC: PICLas_HF
+    TPMC: PICLas_TPMC
+    SENTMAN: Sentman
+  maximum_counts:
+    DSMC: 20
+    TPMC: 200
+    SENTMAN: 2000
+  geometry:
+    id: GOCE
+    name: GOCE
+    characteristic_length: 5.0
+    geometry_class: streamlined
+    metadata:
+      hf_mesh: GOCE_mesh.h5
+      lf_model: GOCE
+      reference_area_m2: 0.0236561598414
+  regime:
+    id: GOCE_20131021_D3
+    label: GOCE trajectory-conditioned 244 km case
+    descriptors:
+      altitude_km: 244.14592193
+      characteristic_length: 5.0
+      speed_ratio: 8.0
+      freestream_temperature: 961.226929
+      composition_descriptor: O=0.725,N2=0.260,O2=0.011,He=0.003
+      datetime_utc: '2013-10-23T11:59:14+00:00'
+      lat_deg: -59.795608906
+      lon_deg: -77.410888066
+      density_kg_m3: 6.946359459858e-11
+      relative_speed_mps: 7802.648218
+      geometry_class: streamlined
+      surface_state: proxy_bounded
+  active_source_blocks:
+    - environment.density
+    - environment.composition
+    - environment.temperature
+    - environment.winds
+    - attitude.dispersion
+    - gsi.energy_accommodation
+    - gsi.surface_temperature
+  variables:
+    - name: density_state_scale
+      source_block: environment.density
+      distribution: {kind: normal, params: {mean: 1.0, std: 0.1}}
+      baseline: 1.0
+      bounds: [0.7, 1.5]
+    - name: density_state_temperature_offset_k
+      source_block: environment.density
+      distribution: {kind: normal, params: {mean: 0.0, std: 60.0}}
+      baseline: 0.0
+      bounds: [-200.0, 200.0]
+    - name: density_state_composition_shift
+      source_block: environment.density
+      distribution: {kind: normal, params: {mean: 0.0, std: 0.04}}
+      baseline: 0.0
+      bounds: [-0.18, 0.18]
+    - name: composition_shift
+      source_block: environment.composition
+      distribution: {kind: normal, params: {mean: 0.0, std: 0.05}}
+      baseline: 0.0
+      bounds: [-0.25, 0.25]
+    - name: temperature_offset_k
+      source_block: environment.temperature
+      distribution: {kind: normal, params: {mean: 0.0, std: 100.0}}
+      baseline: 0.0
+      bounds: [-300.0, 300.0]
+    - name: wind_east_mps
+      source_block: environment.winds
+      distribution: {kind: normal, params: {mean: 0.0, std: 75.0}}
+      baseline: 0.0
+      bounds: [-250.0, 250.0]
+    - name: wind_north_mps
+      source_block: environment.winds
+      distribution: {kind: normal, params: {mean: 0.0, std: 50.0}}
+      baseline: 0.0
+      bounds: [-250.0, 250.0]
+    - name: wind_up_mps
+      source_block: environment.winds
+      distribution: {kind: normal, params: {mean: 0.0, std: 15.0}}
+      baseline: 0.0
+      bounds: [-100.0, 100.0]
+    - name: aos_deg
+      source_block: attitude.dispersion
+      distribution: {kind: normal, params: {mean: 0.0, std: 2.0}}
+      baseline: 0.0
+      bounds: [-5.0, 5.0]
+    - name: aoa_deg
+      source_block: attitude.dispersion
+      distribution: {kind: normal, params: {mean: 0.0, std: 2.0}}
+      baseline: 0.0
+      bounds: [-5.0, 5.0]
+    - name: energy_accommodation
+      source_block: gsi.energy_accommodation
+      distribution: {kind: normal, params: {mean: 0.9, std: 0.05}}
+      baseline: 0.9
+      bounds: [0.75, 1.0]
+    - name: wall_temperature_k
+      source_block: gsi.surface_temperature
+      distribution: {kind: normal, params: {mean: 300.0, std: 25.0}}
+      baseline: 300.0
+      bounds: [250.0, 380.0]
+  sampling:
+    method: independent
+  qois: [C_D, C_D2]
+  execution:
+    backend: legacy_slurm
+    environment:
+      model: pymsis_hwm14
+      use_winds: true
+      apply_wind_to_speed: true
+    flow_zero_direction: [-1.0, 0.0, 0.0]
+    hf_mesh: GOCE_mesh.h5
+  models:
+    hf:
+      id: PICLas_HF
+      kind: legacy_piclas
+      kwargs:
+        simulator_module: PICLas_prandtl
+        mpi_procs: 64
+        submission_batch_size: 10
+        submission_group_size: 1
+        surface_archive:
+          enabled: true
+          path: data/field_inputs/goce_244km/DSMC_surface_loads.npz
+          case_name: GOCE-244km-TPMC-Sentman
+          fidelity: DSMC
+          geometry_id: GOCE
+          regime_id: GOCE_20131021_D3
+          append: true
+    lf:
+      - id: PICLas_TPMC
+        kind: legacy_piclas_tpmc
+        kwargs:
+          simulator_module: PICLas_prandtl
+          mpi_procs: 64
+          submission_batch_size: 10
+          submission_group_size: 10
+          surface_archive:
+            enabled: true
+            path: data/field_inputs/goce_244km/TPMC_surface_loads.npz
+            case_name: GOCE-244km-TPMC-Sentman
+            fidelity: TPMC
+            geometry_id: GOCE
+            regime_id: GOCE_20131021_D3
+            append: true
+      - id: Sentman
+        kind: legacy_adbsat
+        method: Sentman
+        kwargs:
+          simulator_module: ADBSat_prandtl
+          base_dir: outputs/mfpod_runtime/goce_244km/ADBSat-PyVersion
+          cpus_per_task: 36
+          surface_archive:
+            enabled: true
+            mapping_path: data/field_inputs/goce_244km/GOCE.surface_mapping.npz
+            path: data/field_inputs/goce_244km/SENTMAN_surface_loads.npz
+            case_name: GOCE-244km-TPMC-Sentman
+            geometry_id: GOCE
+            regime_id: GOCE_20131021_D3
+            append: true
+    available_qois:
+      PICLas_HF: [C_D, C_D2]
+      PICLas_TPMC: [C_D, C_D2]
+      Sentman: [C_D, C_D2]
