@@ -277,7 +277,14 @@ def _greedy_counts(names, costs, options, covariance, weights):
         # Activating an optional control requires a paired block, not one sample.
         for index, name in enumerate(names):
             trial = counts.copy()
-            trial[index] += 1 if index == 0 or trial[index] > 0 else counts[0]
+            if index == 0 or trial[index] > 0:
+                trial[index] += 1
+            else:
+                # At n_i == n_H the nested control correction is identically
+                # zero, so a one-step greedy method would see no benefit and
+                # could never activate an optional control. Test the smallest
+                # useful active block, which has one unpaired control sample.
+                trial[index] = counts[0] + 1
             if index == 0:
                 for j, control in enumerate(names[1:], start=1):
                     if trial[j] > 0 and trial[j] < trial[0]:
@@ -303,6 +310,15 @@ def _continuous_round_counts(names, costs, options, covariance, weights):
     start = _minimum_feasible(names, costs, options).astype(float)
     if not _feasible(start, names, costs, options, integer=False):
         start = lower.astype(float)
+    # The relaxation below treats every configured control as active. Start
+    # each optional control with one sample beyond the paired target block;
+    # n_i == n_H has an identically zero correction and a singular local
+    # objective, while n_i == 0 violates the relaxation's active constraints.
+    active_start = start.copy()
+    for index in range(1, len(names)):
+        active_start[index] = max(active_start[index], active_start[0] + 1.0)
+    if _feasible(active_start, names, costs, options, integer=False):
+        start = active_start
     constraints = [{"type": "ineq", "fun": lambda x: options.budget - np.dot(x, [costs[n] for n in names])}]
     for index, name in enumerate(names[1:], start=1):
         min_ratio = float(options.min_ratios.get(name, 0.0))
