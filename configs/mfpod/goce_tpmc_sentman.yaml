@@ -1,21 +1,19 @@
-case_name: GOCE-244km-TPMC-Sentman
+case_name: GOCE-244km-TPMC
 geometry_id: GOCE
 output_root: ../../outputs/field_pod_mfmc_three_fidelity
 
 high_fidelity: DSMC
-control_variates: [TPMC, SENTMAN]
+control_variates: [TPMC]
 
 fidelity_archives:
   DSMC: ../../data/field_inputs/goce_244km/DSMC_surface_loads.npz
   TPMC: ../../data/field_inputs/goce_244km/TPMC_surface_loads.npz
-  SENTMAN: ../../data/field_inputs/goce_244km/SENTMAN_surface_loads.npz
 
 # Scenario costs only. Replace with comparable measured CPU-hour statistics
 # before making a production-optimality claim.
 costs:
   DSMC: 1.0
   TPMC: 0.05
-  SENTMAN: 0.001
 
 field_representation:
   quantity: Total_ForcePerArea
@@ -26,7 +24,7 @@ field_representation:
   centering: pilot_dsmc_mean
 
 pilot:
-  # Independent, fully paired DSMC/TPMC/Sentman fields used only to estimate
+  # Independent, fully paired DSMC/TPMC fields used only to estimate
   # costs, Hilbert-space covariance blocks, weights, and allocations.
   paired_samples: 30
 # Independent DSMC-only truth set used only by the final validation.
@@ -70,7 +68,6 @@ validation:
   require_disjoint_roles: true
   fixed_ratios:
     TPMC: 5.0
-    SENTMAN: 50.0
 
 random_seed: 12345
 infeasible_policy: fail
@@ -87,17 +84,12 @@ production:
   backend: legacy_slurm
   study_id: goce_244km_field_mfpod
   random_seed: 12345
-  adbsat_runtime:
-    source_base_dir: ADBSat-PyVersion
-    base_dir: outputs/mfpod_runtime/goce_244km/ADBSat-PyVersion
   model_ids:
     DSMC: PICLas_HF
     TPMC: PICLas_TPMC
-    SENTMAN: Sentman
   maximum_counts:
     DSMC: 20
     TPMC: 200
-    SENTMAN: 2000
   geometry:
     id: GOCE
     name: GOCE
@@ -215,7 +207,7 @@ production:
         surface_archive:
           enabled: true
           path: data/field_inputs/goce_244km/DSMC_surface_loads.npz
-          case_name: GOCE-244km-TPMC-Sentman
+          case_name: GOCE-244km-TPMC
           fidelity: DSMC
           geometry_id: GOCE
           regime_id: GOCE_20131021_D3
@@ -231,27 +223,11 @@ production:
           surface_archive:
             enabled: true
             path: data/field_inputs/goce_244km/TPMC_surface_loads.npz
-            case_name: GOCE-244km-TPMC-Sentman
+            case_name: GOCE-244km-TPMC
             fidelity: TPMC
-            geometry_id: GOCE
-            regime_id: GOCE_20131021_D3
-            append: true
-      - id: Sentman
-        kind: legacy_adbsat
-        method: Sentman
-        kwargs:
-          simulator_module: ADBSat_prandtl
-          base_dir: outputs/mfpod_runtime/goce_244km/ADBSat-PyVersion
-          cpus_per_task: 36
-          surface_archive:
-            enabled: true
-            mapping_path: data/field_inputs/goce_244km/GOCE.surface_mapping.npz
-            path: data/field_inputs/goce_244km/SENTMAN_surface_loads.npz
-            case_name: GOCE-244km-TPMC-Sentman
             geometry_id: GOCE
             regime_id: GOCE_20131021_D3
             append: true
     available_qois:
       PICLas_HF: [C_D, C_D2]
       PICLas_TPMC: [C_D, C_D2]
-      Sentman: [C_D, C_D2]

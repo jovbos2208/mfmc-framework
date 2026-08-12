@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import os
 from dataclasses import replace
@@ -18,74 +17,13 @@ from .estimator import (
     statistical_flags,
 )
 from .experiments import _mode_specific_active_sources
+from .fingerprints import request_fingerprints as _request_fingerprints
+from .fingerprints import sample_fingerprints as _sample_fingerprints
 from .output import ResultStore
 from .qoi_registry import build_qoi_registry
 from .reproducibility import derive_seed, get_run_fingerprint
 from .sampling import InputModel, SamplingContext
 from .types import EvaluationRequest, EvaluationResult
-
-
-def _fingerprint_payload(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(k): _fingerprint_payload(v) for k, v in sorted(value.items(), key=lambda item: str(item[0]))}
-    if isinstance(value, (list, tuple)):
-        return [_fingerprint_payload(v) for v in value]
-    if isinstance(value, np.ndarray):
-        return _fingerprint_payload(value.tolist())
-    if isinstance(value, np.integer):
-        return int(value)
-    if isinstance(value, np.floating):
-        return None if not np.isfinite(value) else float(value)
-    if isinstance(value, float):
-        return None if not np.isfinite(value) else value
-    return value
-
-
-def _hash_payload(value: Any) -> str:
-    payload = json.dumps(_fingerprint_payload(value), sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def _sample_fingerprints(samples: Sequence[Dict[str, Any]]) -> List[str]:
-    return [_hash_payload(sample) for sample in samples]
-
-
-def _request_fingerprints(request: EvaluationRequest) -> List[str]:
-    geometry_payload = {
-        "geometry_id": request.geometry.geometry_id,
-        "name": request.geometry.name,
-        "characteristic_length": request.geometry.characteristic_length,
-        "geometry_class": request.geometry.geometry_class,
-        "tags": request.geometry.tags,
-        "metadata": request.geometry.metadata,
-    }
-    regime_payload = {
-        "regime_id": request.regime.regime_id,
-        "label": request.regime.label,
-        "descriptors": request.regime.descriptors,
-        "metadata": request.regime.metadata,
-    }
-    common = {
-        "study_id": request.study_id,
-        "model_id": request.model_id,
-        "fidelity": request.fidelity,
-        "qois": list(request.qois),
-        "geometry": geometry_payload,
-        "regime": regime_payload,
-        "active_source_blocks": sorted(request.active_source_blocks),
-        "seed": int(request.seed),
-        "metadata": request.metadata,
-    }
-    return [
-        _hash_payload(
-            {
-                **common,
-                "sample_id": request.sample_ids[idx] if idx < len(request.sample_ids) else "",
-                "sample": sample,
-            }
-        )
-        for idx, sample in enumerate(request.samples)
-    ]
 
 
 def _direct_qois(config: Dict[str, Any]) -> List[str]:
@@ -166,12 +104,16 @@ def _append_model_evaluation_rows(
     values_by_qoi: Dict[str, Sequence[float]],
     costs: Sequence[float],
     phase: str,
+    samples: Sequence[Dict[str, Any]] | None = None,
+    geometry_characteristic_length: float | None = None,
+    geometry_metadata: Dict[str, Any] | None = None,
     sample_indices: Sequence[int] | None = None,
     sample_fingerprints: Sequence[str] | None = None,
     request_fingerprints: Sequence[str] | None = None,
 ) -> None:
     max_len = max([len(sample_ids), len(costs)] + [len(values_by_qoi.get(q, [])) for q in qois], default=0)
     output_indices = list(sample_indices) if sample_indices is not None else list(range(max_len))
+    input_rows: List[Dict[str, Any]] = []
     for qoi in qois:
         values = list(values_by_qoi.get(qoi, []))
         for idx in range(max_len):
@@ -206,6 +148,43 @@ def _append_model_evaluation_rows(
                     "cost": costs[idx] if idx < len(costs) else float("nan"),
                 }
             )
+            if samples is None or idx >= len(samples):
+                continue
+            input_row: Dict[str, Any] = {
+                "study_id": study_id,
+                "cell_id": cell_id,
+                "phase": phase,
+                "mode": mode,
+                "geometry_id": geometry_id,
+                "regime_id": regime_id,
+                "active_sources": list(active_sources),
+                "qoi": qoi,
+                "model_id": model_id,
+                "fidelity": fidelity,
+                "hf_model_id": hf_model_id,
+                "lf_model_id": lf_model_id,
+                "pilot_size": pilot_size,
+                "budget": pilot_size,
+                "repetition": repetition,
+                "seed": seed,
+                "sample_id": sample_ids[idx] if idx < len(sample_ids) else "",
+                "sample_index": sample_index,
+                "sample_fingerprint": sample_fingerprints[idx]
+                if sample_fingerprints is not None and idx < len(sample_fingerprints)
+                else "",
+                "request_fingerprint": request_fingerprints[idx]
+                if request_fingerprints is not None and idx < len(request_fingerprints)
+                else "",
+                "geometry_characteristic_length": geometry_characteristic_length,
+            }
+            for name, value in samples[idx].items():
+                if isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, bool):
+                    input_row[f"input__{name}"] = float(value) if np.isfinite(value) else ""
+            for name, value in (geometry_metadata or {}).items():
+                if isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, bool):
+                    input_row[f"geometry__{name}"] = float(value) if np.isfinite(value) else ""
+            input_rows.append(input_row)
+    store.append_sample_inputs(input_rows)
 
 
 def _existing_model_evaluation_result(
@@ -394,6 +373,9 @@ def _evaluate_with_model_evaluation_reuse(
                 values_by_qoi=subset_result.values_by_qoi,
                 costs=subset_result.costs,
                 phase=phase,
+                samples=subset_request.samples,
+                geometry_characteristic_length=subset_request.geometry.characteristic_length,
+                geometry_metadata=subset_request.geometry.metadata,
                 sample_indices=missing_indices,
                 sample_fingerprints=[sample_fingerprints[idx] for idx in missing_indices],
                 request_fingerprints=[request_fingerprints[idx] for idx in missing_indices],
@@ -698,6 +680,9 @@ def run_pilot_correlation(config: Dict[str, Any], resume: bool = False) -> Dict[
                                     values_by_qoi=hf_result.values_by_qoi,
                                     costs=hf_result.costs,
                                     phase="pilot_hf",
+                                    samples=hf_request.samples,
+                                    geometry_characteristic_length=hf_request.geometry.characteristic_length,
+                                    geometry_metadata=hf_request.geometry.metadata,
                                     sample_fingerprints=_sample_fingerprints(hf_request.samples),
                                     request_fingerprints=_request_fingerprints(hf_request),
                                 )

@@ -1,4 +1,5 @@
 import os
+import fcntl
 import time
 import glob
 import zipfile
@@ -382,7 +383,8 @@ class PiclasSimulator:
                  required_surface_state_files=None,
                  node_cores=64,
                  submission_group_size=10,
-                 submit_sleep_s=0.0):
+                 submit_sleep_s=0.0,
+                 bad_node_file=None):
         self.update_script = update_script
         self.update_dir = os.path.abspath(update_dir)
         self.piclas_dir = os.path.abspath(piclas_dir)
@@ -409,6 +411,12 @@ class PiclasSimulator:
         self.node_cores = max(1, int(node_cores))
         self.submission_group_size = max(1, int(submission_group_size))
         self.submit_sleep_s = max(0.0, float(submit_sleep_s))
+        if bad_node_file is None:
+            self.bad_node_file = os.path.join(self.piclas_dir, "bad_nodes.txt")
+        elif os.path.isabs(str(bad_node_file)):
+            self.bad_node_file = str(bad_node_file)
+        else:
+            self.bad_node_file = os.path.join(self.piclas_dir, str(bad_node_file))
         self.geometry_mesh_map = {k: v for k, v in GEOMETRY_MESH_ALIASES.items()}
         if isinstance(geometry_mesh_map, dict):
             for k, v in geometry_mesh_map.items():
@@ -547,7 +555,63 @@ class PiclasSimulator:
             )
         return job_subdir
 
-    def create_simulation_job_script(self, job_subdir):
+    @staticmethod
+    def _valid_node_name(node):
+        value = str(node).strip()
+        return bool(value) and all(char.isalnum() or char in "._-" for char in value)
+
+    def _load_bad_nodes(self):
+        try:
+            with open(self.bad_node_file, "r", encoding="utf-8") as handle:
+                return {
+                    line.strip()
+                    for line in handle
+                    if self._valid_node_name(line.strip())
+                }
+        except FileNotFoundError:
+            return set()
+
+    def _record_bad_nodes(self, nodes):
+        additions = {str(node).strip() for node in nodes if self._valid_node_name(node)}
+        if not additions:
+            return set()
+
+        os.makedirs(os.path.dirname(self.bad_node_file) or ".", exist_ok=True)
+        lock_path = self.bad_node_file + ".lock"
+        with open(lock_path, "a+", encoding="utf-8") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            existing = self._load_bad_nodes()
+            updated = existing | additions
+            if updated != existing:
+                temporary = f"{self.bad_node_file}.{os.getpid()}.tmp"
+                try:
+                    with open(temporary, "w", encoding="utf-8") as handle:
+                        handle.write("\n".join(sorted(updated)) + "\n")
+                    os.replace(temporary, self.bad_node_file)
+                finally:
+                    try:
+                        os.remove(temporary)
+                    except FileNotFoundError:
+                        pass
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+        newly_added = updated - existing
+        if newly_added:
+            print(
+                "PICLas-Bad-Node-Liste aktualisiert: "
+                f"{','.join(sorted(newly_added))} -> {self.bad_node_file}"
+            )
+        return newly_added
+
+    def _slurm_exclude_directive(self, extra_nodes=None):
+        nodes = ["cn0916", "cn0467", "cn0687"]
+        for node in sorted(self._load_bad_nodes()) + list(extra_nodes or ()):
+            value = str(node).strip()
+            if self._valid_node_name(value) and value not in nodes:
+                nodes.append(value)
+        return "#SBATCH --exclude=" + ",".join(nodes)
+
+    def create_simulation_job_script(self, job_subdir, excluded_nodes=None):
         ntasks = max(1, int(self.mpi_procs))
         script_lines = [
             "#!/bin/bash",
@@ -559,8 +623,9 @@ class PiclasSimulator:
             "#SBATCH --output=piclas_slurm-%j.out",
             "#SBATCH --error=piclas_slurm-%j.err",
             "#SBATCH --mail-type=NONE",
+            "#SBATCH --open-mode=append",
             "#SBATCH --partition=cpu",
-            "#SBATCH --exclude=cn0916,cn0467,cn0687",
+            self._slurm_exclude_directive(excluded_nodes),
             "",
             "module purge",
             "module load GCC/13.3.0",
@@ -573,7 +638,7 @@ class PiclasSimulator:
             "start=$(date +%s%3N)",
             f"NTASKS=${{SLURM_NTASKS:-{ntasks}}}",
             # Some nodes/environments expose incompatible defaults (e.g. pmix_v3).
-            # Resolve a supported srun --mpi backend at runtime and fall back to mpirun.
+            # Resolve a supported srun --mpi backend at runtime.
             "unset SLURM_MPI_TYPE",
             "if command -v srun >/dev/null 2>&1; then",
             "  SRUN_MPI_OPT=\"\"",
@@ -587,12 +652,16 @@ class PiclasSimulator:
             "  else",
             "    SRUN_MPI_OPT=\"--mpi=none\"",
             "  fi",
-            "  if ! srun $SRUN_MPI_OPT -n \"$NTASKS\" ./piclas parameter.ini DSMC1.ini; then",
-            "    echo \"srun failed with '$SRUN_MPI_OPT' -> falling back to mpirun\"",
-            "    mpirun --oversubscribe -np \"$NTASKS\" ./piclas parameter.ini DSMC1.ini",
+            "  if srun $SRUN_MPI_OPT --kill-on-bad-exit=1 -n \"$NTASKS\" ./piclas parameter.ini DSMC1.ini; then",
+            "    echo \"PICLas completed successfully\"",
+            "  else",
+            "    rc=$?",
+            "    echo \"srun failed with exit code ${rc} on ${SLURMD_NODENAME:-unknown}\" >&2",
+            "    exit \"$rc\"",
             "  fi",
             "else",
-            "  mpirun --oversubscribe -np \"$NTASKS\" ./piclas parameter.ini DSMC1.ini",
+            "  echo \"srun is required for robust SLURM step handling\" >&2",
+            "  exit 127",
             "fi",
             "end=$(date +%s%3N)",
             "runtime=$((end - start))",
@@ -610,7 +679,7 @@ class PiclasSimulator:
         job_id = result.stdout.strip().split()[-1]
         return job_id
 
-    def create_simulation_group_job_script(self, job_subdirs):
+    def create_simulation_group_job_script(self, job_subdirs, excluded_nodes=None):
         ntasks = max(1, int(self.mpi_procs))
         group_dir = os.path.join(self.piclas_dir, "group_jobs")
         os.makedirs(group_dir, exist_ok=True)
@@ -626,8 +695,9 @@ class PiclasSimulator:
             "#SBATCH --output=piclas_group-%j.out",
             "#SBATCH --error=piclas_group-%j.err",
             "#SBATCH --mail-type=NONE",
+            "#SBATCH --open-mode=append",
             "#SBATCH --partition=cpu",
-            "#SBATCH --exclude=cn0916,cn0467,cn0687,cn0631",
+            self._slurm_exclude_directive(["cn0631", *(excluded_nodes or ())]),
             "",
             "module purge",
             "module load GCC/13.3.0",
@@ -654,12 +724,16 @@ class PiclasSimulator:
             "    else",
             "      SRUN_MPI_OPT=\"--mpi=none\"",
             "    fi",
-            "    if ! srun $SRUN_MPI_OPT -n \"$NTASKS\" ./piclas parameter.ini DSMC1.ini; then",
-            "      echo \"srun failed with '$SRUN_MPI_OPT' -> falling back to mpirun\"",
-            "      mpirun --oversubscribe -np \"$NTASKS\" ./piclas parameter.ini DSMC1.ini",
+            "    if srun $SRUN_MPI_OPT --kill-on-bad-exit=1 -n \"$NTASKS\" ./piclas parameter.ini DSMC1.ini; then",
+            "      echo \"PICLas completed successfully\"",
+            "    else",
+            "      rc=$?",
+            "      echo \"srun failed with exit code ${rc} on ${SLURMD_NODENAME:-unknown}\" >&2",
+            "      exit \"$rc\"",
             "    fi",
             "  else",
-            "    mpirun --oversubscribe -np \"$NTASKS\" ./piclas parameter.ini DSMC1.ini",
+            "    echo \"srun is required for robust SLURM step handling\" >&2",
+            "    exit 127",
             "  fi",
             "  end=$(date +%s%3N)",
             "  runtime=$((end - start))",
@@ -677,38 +751,66 @@ class PiclasSimulator:
 
     def _query_job_states(self, job_ids=None):
         cmd = ["squeue", "-h", "-o", "%i %t"]
-        if job_ids:
-            normalized = [str(job_id) for job_id in job_ids]
-            cmd.extend(["--jobs", ",".join(normalized)])
+        queue_user = os.environ.get("SLURM_JOB_USER") or os.environ.get("USER")
+        if queue_user:
+            cmd.extend(["--user", queue_user])
+        requested = {str(job_id) for job_id in job_ids} if job_ids else None
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError:
-            return {}
+        except (OSError, subprocess.CalledProcessError) as exc:
+            stderr = str(getattr(exc, "stderr", "") or "").strip()
+            detail = stderr or str(exc)
+            print(f"squeue-Abfrage fehlgeschlagen; Status wird erneut geprüft: {detail}")
+            return None
 
         states = {}
         for line in result.stdout.splitlines():
             parts = line.strip().split(None, 1)
             if len(parts) != 2:
                 continue
+            if requested is not None and parts[0] not in requested:
+                continue
             states[parts[0]] = parts[1].strip()
         return states
 
-    def _wait_for_job_completion(self, job_id, poll_interval=10):
+    @staticmethod
+    def _raise_after_repeated_status_errors(error_count, max_status_errors):
+        if error_count >= max_status_errors:
+            raise RuntimeError(
+                "SLURM-Jobstatus konnte wiederholt nicht abgefragt werden; "
+                "Outputs werden aus Sicherheitsgründen nicht bereinigt oder erneut gestartet."
+            )
+
+    def _wait_for_job_completion(self, job_id, poll_interval=10, max_status_errors=10):
         tracked_job_id = str(job_id)
+        status_errors = 0
         while True:
             job_states = self._query_job_states([tracked_job_id])
+            if job_states is None:
+                status_errors += 1
+                self._raise_after_repeated_status_errors(status_errors, max_status_errors)
+                time.sleep(poll_interval)
+                continue
+            status_errors = 0
             state = job_states.get(tracked_job_id)
-            if state is None or state == "CG":
+            if state in (None, "CG"):
                 break
             time.sleep(poll_interval)
 
-    def _wait_for_all_jobs_completion(self, job_ids, poll_interval=60):
+    def _wait_for_all_jobs_completion(self, job_ids, poll_interval=60, max_status_errors=10):
         pending_job_ids = {str(job_id) for job_id in job_ids}
+        status_errors = 0
         while True:
             if not pending_job_ids:
                 break
             job_states = self._query_job_states(sorted(pending_job_ids))
+            if job_states is None:
+                status_errors += 1
+                self._raise_after_repeated_status_errors(status_errors, max_status_errors)
+                time.sleep(poll_interval)
+                continue
+            status_errors = 0
             pending_job_ids = {
                 job_id
                 for job_id in pending_job_ids
@@ -719,6 +821,35 @@ class PiclasSimulator:
             print(f"Warte auf Abschluss von {len(pending_job_ids)} Jobs...")
             time.sleep(poll_interval)
         print("Alle Jobs abgeschlossen!")
+
+    def _query_job_nodes(self, job_ids):
+        normalized = [str(job_id) for job_id in job_ids]
+        if not normalized:
+            return {}
+        cmd = [
+            "sacct", "-n", "-P", "-j", ",".join(normalized),
+            "--format=JobIDRaw,NodeList,State",
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            detail = str(getattr(exc, "stderr", "") or exc).strip()
+            print(f"NodeList konnte für Retry nicht bestimmt werden: {detail}")
+            return {}
+
+        requested = set(normalized)
+        allocations = {}
+        for line in result.stdout.splitlines():
+            parts = line.strip().split("|", 2)
+            if len(parts) < 2 or parts[0] not in requested:
+                continue
+            node = parts[1].strip()
+            if node and node.lower() not in {"none", "unknown", "(null)", "n/a"}:
+                allocations[parts[0]] = {
+                    "node": node,
+                    "state": parts[2].strip() if len(parts) > 2 else "",
+                }
+        return allocations
 
     def _surface_state_glob_pattern(self, job_subdir=None, geometry_id=None, geometry_mesh=None):
         if job_subdir is not None:
@@ -758,8 +889,24 @@ class PiclasSimulator:
                 except FileNotFoundError:
                     continue
 
-    def _wait_for_jobs_and_retry_failed_outputs(self, job_subdirs, job_ids, max_retries=2):
+    def _wait_for_jobs_and_retry_failed_outputs(
+        self,
+        job_subdirs,
+        job_ids,
+        max_retries=2,
+        job_subdirs_by_id=None,
+    ):
         pending_job_ids = list(job_ids)
+        pending_subdirs_by_id = {
+            str(job_id): list(subdirs)
+            for job_id, subdirs in (job_subdirs_by_id or {}).items()
+        }
+        if not pending_subdirs_by_id and len(pending_job_ids) == len(job_subdirs):
+            pending_subdirs_by_id = {
+                str(job_id): [subdir]
+                for job_id, subdir in zip(pending_job_ids, job_subdirs)
+            }
+        excluded_nodes_by_subdir = {subdir: set() for subdir in job_subdirs}
         retry_count = 0
 
         while True:
@@ -770,6 +917,22 @@ class PiclasSimulator:
             failed_subdirs = [subdir for subdir in job_subdirs if not self._has_required_surface_state_outputs(subdir)]
             if not failed_subdirs:
                 return
+
+            failed_set = set(failed_subdirs)
+            newly_bad_nodes = set()
+            for job_id, allocation in self._query_job_nodes(pending_job_ids).items():
+                if isinstance(allocation, dict):
+                    node = str(allocation.get("node", "")).strip()
+                    state = str(allocation.get("state", "")).strip().upper().split("+", 1)[0]
+                else:
+                    node = str(allocation).strip()
+                    state = ""
+                for subdir in pending_subdirs_by_id.get(str(job_id), []):
+                    if subdir in failed_set and self._valid_node_name(node):
+                        excluded_nodes_by_subdir[subdir].add(node)
+                        if state in {"FAILED", "NODE_FAIL", "BOOT_FAIL"}:
+                            newly_bad_nodes.add(node)
+            self._record_bad_nodes(newly_bad_nodes)
 
             if retry_count >= max_retries:
                 missing_outputs = ", ".join(
@@ -789,16 +952,24 @@ class PiclasSimulator:
             )
 
             pending_job_ids = []
+            pending_subdirs_by_id = {}
             for subdir in failed_subdirs:
                 self._cleanup_job_outputs_for_retry(subdir)
-                job_script_path = os.path.join(subdir, self.job_template)
-                if not os.path.exists(job_script_path):
-                    job_script_path = self.create_simulation_job_script(subdir)
+                excluded_nodes = sorted(excluded_nodes_by_subdir[subdir])
+                job_script_path = self.create_simulation_job_script(
+                    subdir,
+                    excluded_nodes=excluded_nodes,
+                )
                 if self.submit_sleep_s > 0.0:
                     time.sleep(self.submit_sleep_s)
                 job_id = self.submit_simulation_job(job_script_path)
-                print(f"Retry-Job {job_id} für {os.path.basename(subdir)} gestartet.")
+                exclusion_text = f"; ausgeschlossen: {','.join(excluded_nodes)}" if excluded_nodes else ""
+                print(
+                    f"Retry-Job {job_id} für {os.path.basename(subdir)} gestartet"
+                    f"{exclusion_text}."
+                )
                 pending_job_ids.append(job_id)
+                pending_subdirs_by_id[str(job_id)] = [subdir]
 
     def submit_postprocessing_job(self, list_of_job_subdirs, random_seed, wait_for_completion=True):
         postproc_dir = os.path.join(self.piclas_dir, "postprocessing")
@@ -814,7 +985,7 @@ class PiclasSimulator:
             "#SBATCH --error=piclas_postproc-%j.err",
             "#SBATCH --mail-type=NONE",
             "#SBATCH --partition=cpu",
-            "#SBATCH --exclude=cn0916,cn0467,cn0687,cn0631",
+            self._slurm_exclude_directive(["cn0631"]),
             "",
             "module purge",
             "module load GCC/13.3.0",
@@ -1070,6 +1241,7 @@ class PiclasSimulator:
     ):
         job_ids = []
         job_subdirs = []
+        job_subdirs_by_id = {}
         aos_seq = _expand_values(aos_values if aos_values is not None else AoS, len(db_indices), float(AoS))
         aoa_seq = _expand_values(aoa_values if aoa_values is not None else 0.0, len(db_indices), 0.0)
         seed_seq = _expand_int_values(random_seeds if random_seeds is not None else 1, len(db_indices), 1)
@@ -1106,12 +1278,14 @@ class PiclasSimulator:
                     f"({len(group_db_indices)} cases, sequential) erstellt und gestartet."
                 )
                 job_ids.append(job_id)
+                job_subdirs_by_id[str(job_id)] = list(group_subdirs)
                 group_subdirs = []
                 group_db_indices = []
 
         return {
             "job_ids": job_ids,
             "job_subdirs": job_subdirs,
+            "job_subdirs_by_id": job_subdirs_by_id,
             "aos_seq": aos_seq,
             "aoa_seq": aoa_seq,
             "flow_zero_direction": flow_zero_direction if flow_zero_direction is not None else self.flow_zero_direction,
@@ -1122,7 +1296,12 @@ class PiclasSimulator:
     def wait_for_batch_jobs(self, batch_handle, max_retries=2):
         job_ids = list(batch_handle.get("job_ids", []))
         job_subdirs = list(batch_handle.get("job_subdirs", []))
-        self._wait_for_jobs_and_retry_failed_outputs(job_subdirs, job_ids, max_retries=max_retries)
+        self._wait_for_jobs_and_retry_failed_outputs(
+            job_subdirs,
+            job_ids,
+            max_retries=max_retries,
+            job_subdirs_by_id=batch_handle.get("job_subdirs_by_id", {}),
+        )
         return batch_handle
 
     def submit_batch_postprocessing(self, batch_handles, random_seed, wait_for_completion=True):
