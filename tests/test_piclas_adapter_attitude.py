@@ -29,6 +29,7 @@ class TestPiclasAdapterAttitude(unittest.TestCase):
                 "name": "cylinder_hex_scale_0p1",
                 "metadata": {
                     "hf_mesh": "missing_mesh_is_not_opened.h5",
+                    "piclas_object_boundary_name": "CYLINDER_HEX",
                     "reference_area_m2": 0.001513558965734707,
                 },
             },
@@ -47,6 +48,7 @@ class TestPiclasAdapterAttitude(unittest.TestCase):
         self.assertAlmostEqual(0.001513558965734707, payload["reference_area_m2"], places=15)
         self.assertAlmostEqual(0.001513558965734707, payload["piclas_reference_area_m2"], places=15)
         self.assertEqual("explicit_payload", payload["reference_area_source"])
+        self.assertEqual("CYLINDER_HEX", payload["piclas_object_boundary_name"])
 
     def test_legacy_piclas_tpmc_can_be_registered_as_lf(self):
         captured_kwargs = []

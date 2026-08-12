@@ -838,7 +838,13 @@ def _build_environment_payload(
                 payload["lf_model"] = geometry.metadata.get("lf_model")
             if "hf_mesh" in geometry.metadata:
                 payload["hf_mesh"] = geometry.metadata.get("hf_mesh")
-            for key in ("reference_area_m2", "piclas_reference_area_m2", "area_ref_m2", "A_ref"):
+            for key in (
+                "reference_area_m2",
+                "piclas_reference_area_m2",
+                "area_ref_m2",
+                "A_ref",
+                "piclas_object_boundary_name",
+            ):
                 if key in geometry.metadata:
                     payload[key] = geometry.metadata[key]
             for key in _PICLAS_MPF_OVERRIDE_KEYS:
@@ -912,6 +918,7 @@ def _build_environment_payload(
         "A_ref",
         "atmosphere_row",
         "trajectory_index",
+        "piclas_object_boundary_name",
     ]:
         if key in metadata:
             payload[key] = metadata[key]
@@ -1129,6 +1136,14 @@ class LegacyPiclasAdapter(BaseModelAdapter):
         altitude, aos, _aoa, indices, env_model, payload_dir, env_payload_paths, aos_values, aoa_values, random_seeds = self._prepare_batch_request(request)
         try:
             if hasattr(self.sim, "submit_batch_jobs"):
+                submit_kwargs = dict(
+                    object_boundary_name=request.metadata.get(
+                        "piclas_object_boundary_name",
+                        request.geometry.metadata.get("piclas_object_boundary_name"),
+                    )
+                )
+                if submit_kwargs["object_boundary_name"] is None:
+                    submit_kwargs.clear()
                 batch_handle = self.sim.submit_batch_jobs(
                     altitude,
                     aos,
@@ -1147,6 +1162,7 @@ class LegacyPiclasAdapter(BaseModelAdapter):
                             request.metadata.get("zero_flow_direction", request.metadata.get("zero_flow_direction_xyz")),
                         ),
                     ),
+                    **submit_kwargs,
                 )
             else:
                 qoi_values, cpu_hours_list = self.sim.run_batch_qois(

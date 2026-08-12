@@ -32,7 +32,7 @@ if str(ADBSAT_PY_DIR) not in sys.path:
 if str(UPDATE_PARAMETER_DIR) not in sys.path:
     sys.path.insert(0, str(UPDATE_PARAMETER_DIR))
 
-from PICLas import PiclasSimulator
+from PICLas import PiclasSimulator, _boundary3_source_name
 import update_parameter as piclas_update
 from calc.environment import environment as adbsat_environment
 
@@ -53,6 +53,26 @@ class _FakeMesh:
 
 
 class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
+    def test_explicit_piclas_object_boundary_overrides_legacy_obj_default(self):
+        self.assertEqual(
+            "CYLINDER_HEX",
+            _boundary3_source_name(
+                geometry_id="cylinder_hex_scale_0p1",
+                geometry_mesh="cylinder_hex_scale_0p1_mesh.h5",
+                object_boundary_name="CYLINDER_HEX",
+            ),
+        )
+        self.assertEqual(
+            "CYLINDER_HEX",
+            piclas_update._resolve_boundary3_source_name(
+                {
+                    "geometry_id": "cylinder_hex_scale_0p1",
+                    "hf_mesh": "cylinder_hex_scale_0p1_mesh.h5",
+                    "piclas_object_boundary_name": "CYLINDER_HEX",
+                }
+            ),
+        )
+
     def _assert_update_parameter_geometry(self, geometry_id: str, mesh_name: str, source_name: str):
         payload = {
             "geometry_id": geometry_id,

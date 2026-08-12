@@ -532,6 +532,9 @@ def _resolve_effective_attitude(payload: Dict[str, Any], default_aos_deg: float,
 
 
 def _resolve_boundary3_source_name(payload: Dict[str, Any]) -> str:
+    explicit = _payload_value(payload, ["piclas_object_boundary_name"], None)
+    if explicit is not None and str(explicit).strip():
+        return str(explicit).strip().upper()
     project_name = _resolve_project_name(payload)
     mesh_file = _resolve_mesh_file(payload)
     if project_name.upper() == "CUBE" or mesh_file.strip().lower() == "cube_mesh.h5":
