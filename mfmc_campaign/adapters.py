@@ -838,6 +838,9 @@ def _build_environment_payload(
                 payload["lf_model"] = geometry.metadata.get("lf_model")
             if "hf_mesh" in geometry.metadata:
                 payload["hf_mesh"] = geometry.metadata.get("hf_mesh")
+            for key in ("reference_area_m2", "piclas_reference_area_m2", "area_ref_m2", "A_ref"):
+                if key in geometry.metadata:
+                    payload[key] = geometry.metadata[key]
             for key in _PICLAS_MPF_OVERRIDE_KEYS:
                 if key in geometry.metadata:
                     payload[key] = geometry.metadata[key]
