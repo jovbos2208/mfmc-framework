@@ -181,7 +181,9 @@ python scripts/run_cylinder_hex_lf_campaign.py run \
 The second command is a non-mutating preflight unless `--execute` is appended.
 The executable run writes restart state after every geometry and produces
 `lf_robust_metrics.csv`. It evaluates `C_D*A_ref`, because raw coefficients with
-different reference areas are not a valid cross-geometry drag objective.
+different reference areas are not a valid cross-geometry drag objective. Both
+ADBSat and PICLas use the same fixed manifest reference area; legacy ADBSat's
+attitude-dependent projected-area normalization is not used for this study.
 
 After LF completion, select six initial HF geometries without touching the
 reserved validation set:
@@ -191,4 +193,29 @@ python -m mfmc_campaign.cli select-cylinder-hex-initial-hf \
   --design-csv outputs/cylinder_hex/wp5_design/geometry_design.csv \
   --lf-metrics-csv outputs/cylinder_hex/wp5_lf/lf_robust_metrics.csv \
   --output outputs/cylinder_hex/wp5_initial_hf.json --count 6
+```
+
+Build L1 meshes and five common-random-number PICLas inputs for each of the six
+selected geometries (30 initial HF runs):
+
+```bash
+python scripts/build_cylinder_hex_initial_hf_suite.py \
+  --selection outputs/cylinder_hex/wp5_initial_hf.json \
+  --design-manifest outputs/cylinder_hex/wp5_design/geometry_design_manifest.json \
+  --lf-config outputs/cylinder_hex/wp5_lf_config.json \
+  --gmsh gmsh --pyhope pyhope
+
+python scripts/run_cylinder_hex_initial_hf_suite.py submit \
+  --suite piclas/geometry/cylinder_hex_wp5/initial_hf_suite.json \
+  --run-root outputs/cylinder_hex/wp5_initial_hf
+```
+
+The submit command above performs preflight only. Add `--execute` after all six
+geometries report `ready: true`. Collection is likewise performed as one
+restartable suite action:
+
+```bash
+python scripts/run_cylinder_hex_initial_hf_suite.py collect --execute \
+  --suite piclas/geometry/cylinder_hex_wp5/initial_hf_suite.json \
+  --run-root outputs/cylinder_hex/wp5_initial_hf
 ```

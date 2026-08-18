@@ -172,7 +172,10 @@ def run_lf_campaign(config_path: str | Path, output_dir: str | Path, *, execute:
         for sample_id, cd, cost in zip(result.sample_ids, result.values_by_qoi["C_D"], result.costs):
             all_rows.append({
                 "geometry_id": geometry_id, "role": row["role"], "sample_id": sample_id,
-                "C_D": float(cd), "drag_area_m2": float(cd) * area, "cost_cpu_hours": float(cost),
+                "C_D": float(cd), "drag_area_m2": float(cd) * area,
+                "reference_area_m2": area,
+                "reference_area_convention": "canonical_manifest_area",
+                "cost_cpu_hours": float(cost),
             })
         target.mkdir(parents=True, exist_ok=True)
         with results_csv.open("w", newline="", encoding="utf-8") as handle:
@@ -187,6 +190,7 @@ def run_lf_campaign(config_path: str | Path, output_dir: str | Path, *, execute:
             "geometry_id": row["geometry_id"], "role": row["role"], "n": len(values),
             "mean_drag": float(np.mean(values)), "std_drag": float(np.std(values, ddof=1)),
             "q95_drag": float(np.quantile(values, 0.95)),
+            "reference_area_convention": "canonical_manifest_area",
         })
     metrics_csv = target / "lf_robust_metrics.csv"
     with metrics_csv.open("w", newline="", encoding="utf-8") as handle:

@@ -211,8 +211,14 @@ Implemented status:
 - LF robust metrics use `C_D * A_ref`, not raw coefficients. Initial HF
   selection combines LF Pareto coverage, geometry maximin coverage, and the
   baseline while excluding validation geometries.
-- Sequential HF acquisition, L1 volume meshes for selected designs, and HF
-  learning curves remain to be implemented.
+- A reference-area consistency guard now requires both solvers to use the fixed
+  canonical manifest area; legacy ADBSat projected-area normalization is
+  rejected for WP5 metrics.
+- The initial-HF suite builder creates L1 meshes only for selected designs and
+  selects five common, space-filling WP1 uncertainty states per geometry (30
+  initial DSMC runs). A restartable suite driver submits and collects them.
+- Sequential HF acquisition after this pilot and HF learning curves remain to
+  be implemented.
 
 ### WP6 — Robust optimization and paper validation
 

@@ -47,7 +47,10 @@ def test_initial_hf_selection_excludes_validation_and_keeps_baseline(tmp_path: P
     )
     metrics_path = tmp_path / "lf_metrics.csv"
     with metrics_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["geometry_id", "mean_drag", "std_drag", "q95_drag"])
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["geometry_id", "mean_drag", "std_drag", "q95_drag", "reference_area_convention"],
+        )
         writer.writeheader()
         for index, row in enumerate(summary["designs"]):
             if row["eligible_for_model_fitting"]:
@@ -57,6 +60,7 @@ def test_initial_hf_selection_excludes_validation_and_keeps_baseline(tmp_path: P
                         "mean_drag": 1.0 + 0.03 * index,
                         "std_drag": 0.2 - 0.01 * index,
                         "q95_drag": 1.4 + 0.01 * index,
+                        "reference_area_convention": "canonical_manifest_area",
                     }
                 )
     selection = select_initial_hf_designs(

@@ -246,6 +246,16 @@ def select_initial_hf_designs(
     missing = [row["geometry_id"] for row in eligible if row["geometry_id"] not in metrics]
     if missing:
         raise ValueError(f"LF metrics are missing for eligible geometries: {missing[:10]}")
+    invalid_area = [
+        row["geometry_id"]
+        for row in eligible
+        if metrics[row["geometry_id"]].get("reference_area_convention") != "canonical_manifest_area"
+    ]
+    if invalid_area:
+        raise ValueError(
+            "LF metrics do not certify canonical_manifest_area normalization; "
+            f"rerun the corrected LF campaign for: {invalid_area[:10]}"
+        )
     if count < 2 or count > len(eligible):
         raise ValueError("HF selection count must be between two and the eligible design count")
     points = np.asarray(

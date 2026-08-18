@@ -13,6 +13,18 @@ def _mat_scalar(value):
     return float(np.asarray(arr, dtype=float).reshape(-1)[0])
 
 
+def _reference_area(param_eq, projected_area):
+    """Use a campaign-provided canonical area, with legacy projection fallback."""
+    configured = param_eq.get("reference_area_m2")
+    try:
+        configured = float(configured)
+    except (TypeError, ValueError):
+        configured = float("nan")
+    if np.isfinite(configured) and configured > 0.0:
+        return configured, str(param_eq.get("reference_area_source", "campaign_payload"))
+    return max(float(projected_area), 1e-12), "adbsat_wind_projected"
+
+
 def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
                delete_temp_files: bool = False, verbose: bool = False,
                write_mat: bool = True, return_details: bool = False):
@@ -151,8 +163,7 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
             
             area_total = float(np.sum(areas))
             area_proj_total = float(np.sum(area_proj))
-            area_ref = max(area_proj_total, 1e-12)
-            area_ref_source = "adbsat_wind_projected"
+            area_ref, area_ref_source = _reference_area(param_eq, area_proj_total)
 
             # --- shear direction ------------------------------------------------
             tau_dir = np.cross(surfN.T, np.cross(v_matrix.T, surfN.T)).T  # 3×N
