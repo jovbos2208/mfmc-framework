@@ -38,7 +38,7 @@ class TestPiclasAdapterAttitude(unittest.TestCase):
             sample_ids=["sample-0"],
             samples=[{"database_index": 0}],
             seed=1,
-            metadata={"environment_model": "csv"},
+            metadata={"environment_model": "csv", "flow_zero_direction": [1.0, 0.0, 0.0]},
         )
 
         payload = _build_environment_payload(
@@ -49,6 +49,7 @@ class TestPiclasAdapterAttitude(unittest.TestCase):
         self.assertAlmostEqual(0.001513558965734707, payload["piclas_reference_area_m2"], places=15)
         self.assertEqual("explicit_payload", payload["reference_area_source"])
         self.assertEqual("CYLINDER_HEX", payload["piclas_object_boundary_name"])
+        self.assertEqual([1.0, 0.0, 0.0], payload["flow_zero_direction"])
 
     def test_legacy_piclas_tpmc_can_be_registered_as_lf(self):
         captured_kwargs = []

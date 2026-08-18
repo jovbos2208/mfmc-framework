@@ -57,6 +57,7 @@
     ],
     "metadata": {
       "environment_model": "csv",
+      "flow_zero_direction": [1.0, 0.0, 0.0],
       "aos_deg": 0.0,
       "aoa_deg": 0.0,
       "case_name": "cylinder_hex_scale_0p1_dsmc_smoke"

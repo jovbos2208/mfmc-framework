@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 from mfmc_campaign.piclas_adapter_workflow import plan_workflow, preflight, similarity_report
 
@@ -61,3 +62,12 @@ def test_submit_plan_is_non_mutating(tmp_path: Path) -> None:
     assert plan["status"] == "dry_run"
     assert plan["n_samples"] == 1
     assert not state_path.exists()
+
+
+def test_committed_cylinder_smoke_flow_enters_xmin_inlet() -> None:
+    root = Path(__file__).resolve().parents[1]
+    config = json.loads(
+        (root / "configs/studies/cylinder_hex_piclas_adapter_smoke.json").read_text(encoding="utf-8")
+    )
+
+    assert config["request"]["metadata"]["flow_zero_direction"] == [1.0, 0.0, 0.0]

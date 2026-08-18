@@ -99,6 +99,10 @@ ignored local `outputs/` tree. For a restartable Slurm smoke run, edit the adapt
 `configs/studies/cylinder_hex_piclas_adapter_smoke.json`, then first run the
 non-mutating preflight:
 
+The generated farfield marks the `x_min` face as `IN`. The smoke configuration
+therefore fixes `flow_zero_direction` to `[1, 0, 0]`, so injected particles move
+into the gas domain and the same axis is used to project drag during collection.
+
 ```bash
 python scripts/run_piclas_adapter_workflow.py submit \
   --config configs/studies/cylinder_hex_piclas_adapter_smoke.json \
