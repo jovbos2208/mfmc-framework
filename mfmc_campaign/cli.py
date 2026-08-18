@@ -221,6 +221,8 @@ def _cmd_generate_cylinder_hex(args: argparse.Namespace) -> int:
         spec,
         design_id=args.design_id,
         uniform_scale_factor=args.uniform_scale,
+        body_mesh_size_m=args.body_mesh_size_m,
+        farfield_mesh_size_m=args.farfield_mesh_size_m,
     )
     print(json.dumps(summary, indent=2))
     return 0
@@ -447,6 +449,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="Uniform linear scale; area follows factor^2 and volume factor^3",
+    )
+    p_geometry.add_argument(
+        "--body-mesh-size-m",
+        type=float,
+        default=0.06,
+        help="Gmsh characteristic length on spacecraft points",
+    )
+    p_geometry.add_argument(
+        "--farfield-mesh-size-m",
+        type=float,
+        default=0.30,
+        help="Gmsh characteristic length on outer-domain points",
     )
     p_geometry.set_defaults(func=_cmd_generate_cylinder_hex)
 

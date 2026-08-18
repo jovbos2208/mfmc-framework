@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "geometry_family": "cylinder_hex_scale_0p1",
+  "levels": [
+    {
+      "level": "L0",
+      "body_mesh_size_m": 0.06,
+      "farfield_mesh_size_m": 0.3,
+      "geometry_id": "cylinder_hex_scale_0p1",
+      "mesh_path": "piclas/geometry/cylinder_hex_scale_0p1_mesh.h5",
+      "mesh_reference": "geometry/cylinder_hex_scale_0p1_mesh.h5",
+      "workflow_config": "configs/studies/cylinder_hex_piclas_adapter_l0_5seeds.json",
+      "n_tetrahedra": 181,
+      "n_hexahedra": 724,
+      "gas_volume_m3": 0.009880000000000002,
+      "characteristic_cell_size_m": 0.02389678407723923,
+      "gmsh_fingerprint": "cff636047c5a1d10d4135b3d9b3cfe8f9791d9313474d81529c78eed931671e6",
+      "hdf5_fingerprint": "4d9e52ce5463a3d3f07ca1f0dff6475bc0dfa711cde94f737b44bf94c655d941",
+      "scaled_jacobian_histogram": {
+        "<0.0": 0,
+        "0.0-0.1": 724
+      }
+    },
+    {
+      "level": "L1",
+      "body_mesh_size_m": 0.03,
+      "farfield_mesh_size_m": 0.15,
+      "geometry_id": "cylinder_hex_scale_0p1_l1",
+      "mesh_path": "piclas/geometry/cylinder_hex_convergence/L1/cylinder_hex_scale_0p1_l1_mesh.h5",
+      "mesh_reference": "geometry/cylinder_hex_convergence/L1/cylinder_hex_scale_0p1_l1_mesh.h5",
+      "workflow_config": "configs/studies/cylinder_hex_piclas_adapter_l1_5seeds.json",
+      "n_tetrahedra": 412,
+      "n_hexahedra": 1648,
+      "gas_volume_m3": 0.00988,
+      "characteristic_cell_size_m": 0.018166304065140935,
+      "gmsh_fingerprint": "5d857986d8c5d09d57b57676d4ef2d29bdaa89a289353a6659caed147c9f7779",
+      "hdf5_fingerprint": "03b76e3b808bd004ede8abcadf7ed2238ddb665b5faf354d4992766c65453192",
+      "scaled_jacobian_histogram": {
+        "<0.0": 0,
+        "0.0-0.1": 1648,
+        "0.1-0.2": 0,
+        "0.2-0.3": 0,
+        "0.3-0.4": 0,
+        "0.4-0.5": 0,
+        "0.5-0.6": 0,
+        "0.6-0.7": 0,
+        "0.7-0.8": 0,
+        "0.8-0.9": 0,
+        ">0.9-1.0": 0
+      }
+    },
+    {
+      "level": "L2",
+      "body_mesh_size_m": 0.015,
+      "farfield_mesh_size_m": 0.075,
+      "geometry_id": "cylinder_hex_scale_0p1_l2",
+      "mesh_path": "piclas/geometry/cylinder_hex_convergence/L2/cylinder_hex_scale_0p1_l2_mesh.h5",
+      "mesh_reference": "geometry/cylinder_hex_convergence/L2/cylinder_hex_scale_0p1_l2_mesh.h5",
+      "workflow_config": "configs/studies/cylinder_hex_piclas_adapter_l2_5seeds.json",
+      "n_tetrahedra": 1362,
+      "n_hexahedra": 5448,
+      "gas_volume_m3": 0.00988,
+      "characteristic_cell_size_m": 0.012194760683160355,
+      "gmsh_fingerprint": "dd8d65d24bd090c9449dc898f5ea0fe5bd2fc36c5801af3c6dc0b48f285b4410",
+      "hdf5_fingerprint": "990c2e05137c7c8f3e0d83e301b3df60e57b386a405683eb1176b0f2697c5ea3",
+      "scaled_jacobian_histogram": {
+        "<0.0": 0,
+        "0.0-0.1": 5448,
+        "0.1-0.2": 0,
+        "0.2-0.3": 0,
+        "0.3-0.4": 0,
+        "0.4-0.5": 0,
+        "0.5-0.6": 0,
+        "0.6-0.7": 0,
+        "0.7-0.8": 0,
+        "0.8-0.9": 0,
+        ">0.9-1.0": 0
+      }
+    }
+  ]
+}

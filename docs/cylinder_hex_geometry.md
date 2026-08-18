@@ -90,7 +90,7 @@ Then create the solver mesh in the PyHOPE-enabled environment:
 ```bash
 python -m mfmc_campaign.cli convert-cylinder-hex-pyhope \
   --manifest outputs/vleo_geometry/cylinder_hex_baseline/cylinder_hex_baseline.manifest.json \
-  --pyhope /home/jovan/venv/bin/pyhope
+  --pyhope pyhope
 ```
 
 The validated smoke-run mesh and its conversion provenance are versioned under
@@ -117,4 +117,34 @@ python scripts/run_piclas_adapter_workflow.py collect --execute \
   --config configs/studies/cylinder_hex_piclas_adapter_smoke.json \
   --state outputs/vleo_geometry/cylinder_hex_scale_0p1/piclas_batch_state.json \
   --results outputs/vleo_geometry/cylinder_hex_scale_0p1/piclas_results.json
+```
+
+## Mesh-convergence suite
+
+The reproducible convergence builder creates L1 and L2 by halving the Gmsh
+body and farfield characteristic lengths at each level. It validates Gmsh gas
+volume and boundary groups, converts with PyHOPE, records HDF5 fingerprints and
+scaled-Jacobian histograms, and writes five-seed PICLas configs:
+
+```bash
+python scripts/build_cylinder_hex_mesh_convergence.py --pyhope pyhope
+```
+
+The versioned solver meshes contain 724 (L0), 1,648 (L1), and 5,448 (L2)
+hexahedra. Refinement removes no validity checks and introduces no negative
+Jacobians, but tetrahedron-to-hexahedron splitting leaves every element in
+PyHOPE's lowest positive scaled-Jacobian bin. Result convergence and element
+quality must therefore be reported as separate limitations.
+
+Each refined level is submitted and collected with its generated config. After
+all three five-seed result files exist, produce the statistical convergence
+report with:
+
+```bash
+python scripts/analyze_cylinder_hex_mesh_convergence.py \
+  --suite piclas/geometry/cylinder_hex_convergence/mesh_convergence_suite.json \
+  --l0-results outputs/cylinder_hex/piclas_results_5seeds.json \
+  --l1-results outputs/cylinder_hex/mesh_convergence/l1_results.json \
+  --l2-results outputs/cylinder_hex/mesh_convergence/l2_results.json \
+  --output outputs/cylinder_hex/mesh_convergence/convergence_report.json
 ```

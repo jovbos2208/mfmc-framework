@@ -13,6 +13,7 @@ from mfmc_campaign.parametric_geometry import (
     build_geometry_assets,
     build_gmsh_exterior_mesh,
     generate_cylinder_hex,
+    parse_pyhope_scaled_jacobian_histogram,
     validate_piclas_hdf5_mesh,
     validate_surface,
 )
@@ -49,6 +50,27 @@ def test_generation_is_byte_deterministic_and_does_not_require_source_mesh(tmp_p
     manifest = json.loads((tmp_path / "first" / "baseline.manifest.json").read_text())
     assert manifest["provenance"]["external_mesh_reused"] is False
     assert manifest["assets"]["piclas_volume_mesh"] is None
+    assert manifest["gmsh_mesh_controls"] == {
+        "body_mesh_size_m": 0.06,
+        "farfield_mesh_size_m": 0.30,
+    }
+
+
+def test_geometry_asset_mesh_controls_are_written_to_geo_and_manifest(tmp_path: Path) -> None:
+    manifest = build_geometry_assets(
+        tmp_path,
+        CylinderHexSpec().scaled(0.1),
+        design_id="refined",
+        uniform_scale_factor=0.1,
+        body_mesh_size_m=0.015,
+        farfield_mesh_size_m=0.075,
+    )
+
+    geo = (tmp_path / "refined.exterior.geo").read_text(encoding="ascii")
+    assert "lcBody = 0.014999999999999999;" in geo
+    assert "lcFar = 0.074999999999999997;" in geo
+    assert manifest["gmsh_mesh_controls"]["body_mesh_size_m"] == 0.015
+    assert manifest["gmsh_mesh_controls"]["farfield_mesh_size_m"] == 0.075
 
 
 def test_fixed_volume_solution_rejects_envelope_violation() -> None:
@@ -117,3 +139,17 @@ def test_piclas_hdf5_structural_validation(tmp_path: Path) -> None:
     assert report["valid"]
     assert report["boundary_names"] == ["IN", "OUT", "CYLINDER_HEX"]
     assert report["nElems"] == 1
+
+
+def test_pyhope_scaled_jacobian_histogram_parser_handles_ansi_output() -> None:
+    output = (
+        "\x1b[1m│<0.0      │\x1b[0m 0.00\n"
+        "\x1b[1m│ 0.0-0.1  │\x1b[0m ▇▇ 724.00\n"
+        "\x1b[1m│>0.9-1.0  │\x1b[0m 2.00\n"
+    )
+
+    assert parse_pyhope_scaled_jacobian_histogram(output) == {
+        "<0.0": 0,
+        "0.0-0.1": 724,
+        ">0.9-1.0": 2,
+    }

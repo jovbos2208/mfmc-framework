@@ -1,0 +1,209 @@
+{
+  "assets": {
+    "adbsat_mat": "cylinder_hex_scale_0p1_l1.mat",
+    "adbsat_obj": "cylinder_hex_scale_0p1_l1.obj",
+    "canonical_surface_npz": "cylinder_hex_scale_0p1_l1.surface.npz",
+    "gmsh_exterior_geo": "cylinder_hex_scale_0p1_l1.exterior.geo",
+    "gmsh_exterior_msh": "cylinder_hex_scale_0p1_l1.exterior.msh",
+    "meshing_surface_stl": "cylinder_hex_scale_0p1_l1.stl",
+    "piclas_mesh_status": "PyHOPE conversion and structural validation passed; PICLas smoke-run validation remains required",
+    "piclas_volume_mesh": "cylinder_hex_scale_0p1_l1_mesh.h5",
+    "pyhope_config": "cylinder_hex_scale_0p1_l1.pyhope.ini"
+  },
+  "campaign_geometry_descriptor": {
+    "characteristic_length": 0.1,
+    "geometry_class": "parametric_cylinder_hex",
+    "id": "cylinder_hex_scale_0p1_l1",
+    "metadata": {
+      "chamfer_fraction": 0.15,
+      "height_m": 0.03981053250273758,
+      "hf_mesh": "cylinder_hex_scale_0p1_l1_mesh.h5",
+      "nose_length_fraction": 0.2,
+      "reference_area_m2": 0.001513558965734707,
+      "tail_length_fraction": 0.2,
+      "target_volume_m3": 0.00012000000000000003,
+      "width_height_ratio": 1.0,
+      "width_m": 0.03981053250273758
+    },
+    "name": "cylinder_hex_scale_0p1_l1",
+    "tags": [
+      "parametric",
+      "fixed_volume",
+      "convex",
+      "generated_from_scratch"
+    ]
+  },
+  "coordinate_system": {
+    "body_axis": "+x nose-to-tail",
+    "height_axis": "z",
+    "origin": "nose cap center",
+    "units": "m",
+    "width_axis": "y"
+  },
+  "derived_geometry": {
+    "center_length_m": 0.06000000000000001,
+    "height_m": 0.03981053250273758,
+    "maximum_cross_section_area_m2": 0.001513558965734707,
+    "width_m": 0.03981053250273758
+  },
+  "design_fingerprint": "555a3b7d88dea17991b7f62a957c75dafae48bce376c5033c3db2a04bb61f31c",
+  "generator": "mfmc-cylinder-hex",
+  "generator_version": "1.0.0",
+  "geometry_id": "cylinder_hex_scale_0p1_l1",
+  "gmsh_exterior_mesh": {
+    "command": [
+      "gmsh",
+      "-3",
+      "cylinder_hex_scale_0p1_l1.exterior.geo",
+      "-o",
+      "cylinder_hex_scale_0p1_l1.exterior.msh",
+      "-format",
+      "msh2",
+      "-v",
+      "2"
+    ],
+    "gmsh_version": "4.12.1",
+    "validation": {
+      "absolute_gas_volume_error_m3": 1.734723475976807e-18,
+      "boundary_triangle_counts": {
+        "CYLINDER_HEX": 128,
+        "IN": 14,
+        "OUT": 62
+      },
+      "checks": {
+        "finite_positive_tetrahedra": true,
+        "gas_volume_within_tolerance": true,
+        "inlet_boundary_present": true,
+        "outlet_boundary_present": true,
+        "spacecraft_boundary_present": true
+      },
+      "expected_gas_volume_m3": 0.009880000000000002,
+      "gas_volume_m3": 0.00988,
+      "maximum_tetrahedron_volume_m3": 0.00011889851872854898,
+      "mesh_fingerprint": "5d857986d8c5d09d57b57676d4ef2d29bdaa89a289353a6659caed147c9f7779",
+      "minimum_tetrahedron_volume_m3": 6.73573361714398e-08,
+      "n_elements": 616,
+      "n_nodes": 127,
+      "n_tetrahedra": 412,
+      "valid": true
+    }
+  },
+  "gmsh_mesh_controls": {
+    "body_mesh_size_m": 0.03,
+    "farfield_mesh_size_m": 0.15
+  },
+  "mesh_fingerprint": "c5637d5546fef73e0a27499ee64ecf9cb467538ba5118b136863528c57a5e2b6",
+  "provenance": {
+    "external_mesh_reused": false,
+    "scaling_laws": {
+      "area": "factor^2",
+      "length": "factor",
+      "volume": "factor^3"
+    },
+    "source_geometry": "analytical_parameterization",
+    "uniform_linear_scale_factor": 0.1
+  },
+  "pyhope_conversion": {
+    "command": [
+      "pyhope",
+      "cylinder_hex_scale_0p1_l1.pyhope.ini"
+    ],
+    "pyhope_version": "PyHOPE version 1.0.0 [commit None]",
+    "split_tetrahedra_to_hexahedra": true,
+    "validation": {
+      "Ngeo": 1,
+      "boundary_names": [
+        "IN",
+        "OUT",
+        "CYLINDER_HEX"
+      ],
+      "checks": {
+        "expected_boundaries_present": true,
+        "finite_node_coordinates": true,
+        "positive_element_count": true,
+        "required_datasets_present": true
+      },
+      "low_quality_scaled_jacobian_elements_0_to_0p1": 1648,
+      "mesh_fingerprint": "03b76e3b808bd004ede8abcadf7ed2238ddb665b5faf354d4992766c65453192",
+      "nBCs": 3,
+      "nElems": 1648,
+      "nNodes": 13184,
+      "nSides": 9888,
+      "nUniqueNodes": 2104,
+      "nUniqueSides": 5250,
+      "negative_scaled_jacobian_elements": 0,
+      "pyhope_version": "1.0.0",
+      "scaled_jacobian_histogram": {
+        "0.0-0.1": 1648,
+        "0.1-0.2": 0,
+        "0.2-0.3": 0,
+        "0.3-0.4": 0,
+        "0.4-0.5": 0,
+        "0.5-0.6": 0,
+        "0.6-0.7": 0,
+        "0.7-0.8": 0,
+        "0.8-0.9": 0,
+        "<0.0": 0,
+        ">0.9-1.0": 0
+      },
+      "valid": true
+    }
+  },
+  "reference_area": {
+    "attitude_note": "Use wind-projected area for attitude-dependent solver normalization; compare designs using dimensional drag.",
+    "convention": "maximum cross-section projected normal to positive body x-axis",
+    "optimization_quantity": "C_D_times_reference_area_m2",
+    "value_m2": 0.001513558965734707
+  },
+  "schema_version": 1,
+  "specification": {
+    "axial_segments_per_taper": 1,
+    "chamfer_fraction": 0.15,
+    "max_height_m": 0.06,
+    "max_width_m": 0.06,
+    "nose_end_scale": 0.2,
+    "nose_length_fraction": 0.2,
+    "tail_end_scale": 0.45,
+    "tail_length_fraction": 0.2,
+    "target_volume_m3": 0.00012000000000000003,
+    "total_length_m": 0.1,
+    "width_height_ratio": 1.0
+  },
+  "validation": {
+    "absolute_volume_error_m3": 4.0657581468206416e-20,
+    "bounds_max_m": [
+      0.1,
+      0.01990526625136879,
+      0.01990526625136879
+    ],
+    "bounds_min_m": [
+      0.0,
+      -0.01990526625136879,
+      -0.01990526625136879
+    ],
+    "checks": {
+      "convex_no_self_intersection_certificate": true,
+      "finite": true,
+      "fixed_volume_within_tolerance": true,
+      "height_envelope": true,
+      "length_envelope": true,
+      "nondegenerate_triangles": true,
+      "outward_orientation": true,
+      "watertight_two_manifold": true,
+      "width_envelope": true
+    },
+    "envelope_m": [
+      0.1,
+      0.03981053250273758,
+      0.03981053250273758
+    ],
+    "euler_characteristic": 2,
+    "n_triangles": 64,
+    "n_unique_edges": 96,
+    "n_vertices": 34,
+    "signed_volume_m3": 0.00011999999999999999,
+    "surface_area_m2": 0.013781950710202107,
+    "target_volume_m3": 0.00012000000000000003,
+    "valid": true
+  }
+}

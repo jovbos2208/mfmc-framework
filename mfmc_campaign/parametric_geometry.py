@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass, replace
@@ -493,6 +494,8 @@ def build_geometry_assets(
     *,
     design_id: str | None = None,
     uniform_scale_factor: float = 1.0,
+    body_mesh_size_m: float = 0.06,
+    farfield_mesh_size_m: float = 0.30,
 ) -> Dict[str, Any]:
     mesh, derived = generate_cylinder_hex(spec)
     validation = validate_surface(mesh, spec)
@@ -512,7 +515,13 @@ def build_geometry_assets(
     write_obj(obj_path, mesh)
     write_stl(stl_path, mesh)
     write_adbsat_mat(mat_path, mesh, derived["maximum_cross_section_area_m2"])
-    write_gmsh_exterior_geo(gmsh_geo_path, mesh, spec)
+    write_gmsh_exterior_geo(
+        gmsh_geo_path,
+        mesh,
+        spec,
+        body_mesh_size_m=body_mesh_size_m,
+        farfield_mesh_size_m=farfield_mesh_size_m,
+    )
     np.savez_compressed(
         surface_path,
         points=mesh.points,
@@ -582,6 +591,10 @@ def build_geometry_assets(
                 "area": "factor^2",
                 "volume": "factor^3",
             },
+        },
+        "gmsh_mesh_controls": {
+            "body_mesh_size_m": float(body_mesh_size_m),
+            "farfield_mesh_size_m": float(farfield_mesh_size_m),
         },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -783,6 +796,21 @@ def validate_piclas_hdf5_mesh(path: str | Path) -> Dict[str, Any]:
     }
 
 
+def parse_pyhope_scaled_jacobian_histogram(output: str) -> Dict[str, int]:
+    """Extract PyHOPE's element-quality histogram from ANSI-formatted output."""
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", str(output))
+    labels = ("<0.0", "0.0-0.1", "0.1-0.2", "0.2-0.3", "0.3-0.4", "0.4-0.5", "0.5-0.6", "0.6-0.7", "0.7-0.8", "0.8-0.9", ">0.9-1.0")
+    histogram: Dict[str, int] = {}
+    for line in clean.splitlines():
+        fields = [field.strip() for field in line.split("│") if field.strip()]
+        if not fields or fields[0] not in labels:
+            continue
+        numbers = re.findall(r"[-+]?\d+(?:\.\d+)?", fields[-1])
+        if numbers:
+            histogram[fields[0]] = int(round(float(numbers[-1])))
+    return histogram
+
+
 def build_piclas_hdf5_mesh(
     manifest_json: str | Path,
     *,
@@ -829,6 +857,12 @@ def build_piclas_hdf5_mesh(
         failed = [name for name, passed in validation["checks"].items() if not passed]
         raise ParametricGeometryError(f"PyHOPE mesh failed structural validation: {failed}")
 
+    jacobian_histogram = parse_pyhope_scaled_jacobian_histogram(result.stdout)
+    validation["scaled_jacobian_histogram"] = jacobian_histogram
+    validation["negative_scaled_jacobian_elements"] = int(jacobian_histogram.get("<0.0", 0))
+    validation["low_quality_scaled_jacobian_elements_0_to_0p1"] = int(
+        jacobian_histogram.get("0.0-0.1", 0)
+    )
     version = subprocess.run(
         [executable, "--version"], check=False, capture_output=True, text=True
     ).stdout.strip()
@@ -843,7 +877,7 @@ def build_piclas_hdf5_mesh(
         "split_tetrahedra_to_hexahedra": bool(split_tetrahedra_to_hexahedra),
         "validation": validation,
     }
-    manifest["campaign_geometry_descriptor"]["metadata"]["hf_mesh"] = str(mesh_path)
+    manifest["campaign_geometry_descriptor"]["metadata"]["hf_mesh"] = mesh_path.name
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return {
         "status": "piclas_hdf5_mesh_validated",
