@@ -15,7 +15,7 @@
       "update_dir": "update_parameter_file",
       "update_script": "python update_parameter.py",
       "piclas_mode": "dsmc",
-      "mpi_procs": 36,
+      "mpi_procs": 128,
       "submission_group_size": 1,
       "payload_defaults": {
         "density_scale": 10.0
