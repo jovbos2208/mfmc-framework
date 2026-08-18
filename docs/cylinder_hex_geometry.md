@@ -148,3 +148,47 @@ python scripts/analyze_cylinder_hex_mesh_convergence.py \
   --l2-results outputs/cylinder_hex/mesh_convergence/l2_results.json \
   --output outputs/cylinder_hex/mesh_convergence/convergence_report.json
 ```
+
+## WP5 geometry and low-fidelity campaign
+
+The production design contains 32 fixed-volume geometries: the validated
+baseline, 25 LF-training designs, and six validation geometries whose role is
+fixed before solver results are observed. Generate it on the cluster and stage
+the ADBSat assets directly into its runtime with:
+
+```bash
+python -m mfmc_campaign.cli generate-cylinder-hex-design \
+  --output-dir outputs/cylinder_hex/wp5_design \
+  --n-designs 32 --n-validation 6 --uniform-scale 0.1 \
+  --adbsat-runtime-dir ADBSat-PyVersion
+```
+
+Prepare 256 common-random-number uncertainty samples from the first-paper
+archive (the backfilled WP1 `sample_inputs.csv` is equivalent):
+
+```bash
+python scripts/run_cylinder_hex_lf_campaign.py prepare \
+  --design-manifest outputs/cylinder_hex/wp5_design/geometry_design_manifest.json \
+  --source-samples outputs/vleo_wp1_backfill/cube_300km/sample_inputs.csv \
+  --config outputs/cylinder_hex/wp5_lf_config.json \
+  --n-samples 256 --adbsat-runtime-dir ADBSat-PyVersion
+
+python scripts/run_cylinder_hex_lf_campaign.py run \
+  --config outputs/cylinder_hex/wp5_lf_config.json \
+  --output-dir outputs/cylinder_hex/wp5_lf
+```
+
+The second command is a non-mutating preflight unless `--execute` is appended.
+The executable run writes restart state after every geometry and produces
+`lf_robust_metrics.csv`. It evaluates `C_D*A_ref`, because raw coefficients with
+different reference areas are not a valid cross-geometry drag objective.
+
+After LF completion, select six initial HF geometries without touching the
+reserved validation set:
+
+```bash
+python -m mfmc_campaign.cli select-cylinder-hex-initial-hf \
+  --design-csv outputs/cylinder_hex/wp5_design/geometry_design.csv \
+  --lf-metrics-csv outputs/cylinder_hex/wp5_lf/lf_robust_metrics.csv \
+  --output outputs/cylinder_hex/wp5_initial_hf.json --count 6
+```

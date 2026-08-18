@@ -172,13 +172,18 @@ Implemented status:
 - A fresh analytical Gmsh exterior-flow domain with named inlet, outlet, and
   spacecraft boundaries is implemented. Its baseline has 8,361 positive-volume
   tetrahedra, the exact expected gas volume, and deterministic mesh fingerprint.
-- HOPR/PICLas HDF5 conversion and actual PICLas ingestion remain before WP4
-  acceptance is fully closed.
+- HOPR/PICLas HDF5 conversion and actual PICLas ingestion are complete for the
+  uniformly scaled baseline. The corrected smoke case produced
+  `C_D = 2.37246` instead of the earlier zero-force result.
 - A separate uniformly scaled `0.1` baseline is generated without overwriting
   the unit-scale reference. Length, area, and volume follow factors `0.1`,
   `0.01`, and `0.001`; its preliminary exterior mesh has 181 tetrahedra versus
-  8,361. Similarity and mesh-convergence checks are mandatory because geometric
-  scaling changes the Knudsen number at fixed atmosphere.
+  8,361. Density is multiplied by ten so the Knudsen number is preserved.
+- Five-seed L0/L1/L2 runs contain 724, 1,648, and 5,448 hexahedra. Mean drag
+  coefficients are 2.37019, 2.37058, and 2.37160; the total L0-to-L2 change is
+  0.0599% and all confidence intervals overlap. L1 is the production level and
+  L2 is retained for validation. Uniformly low positive scaled Jacobians remain
+  a reported mesh-quality limitation.
 
 ### WP5 — Design-space campaign and sequential HF acquisition
 
@@ -190,6 +195,24 @@ Implemented status:
 
 Acceptance: learning curves report held-out error and robust-metric stability as
 HF cost increases.
+
+Implemented status:
+
+- A deterministic maximin Latin-hypercube design spans the four geometry
+  variables and includes the validated baseline explicitly.
+- Six of the default 32 geometries are fixed as a permanently untouched
+  validation set before any LF or HF outcome is inspected; the training
+  workflow does not evaluate them.
+- Each design writes validated solver assets plus a portable ADBSat runtime
+  bundle. ADBSat now resolves safe generated geometry IDs directly rather than
+  silently falling back to a historical geometry.
+- The restartable LF workflow deterministically thins the archived WP1
+  uncertainty samples and reuses the identical draws for every geometry.
+- LF robust metrics use `C_D * A_ref`, not raw coefficients. Initial HF
+  selection combines LF Pareto coverage, geometry maximin coverage, and the
+  baseline while excluding validation geometries.
+- Sequential HF acquisition, L1 volume meshes for selected designs, and HF
+  learning curves remain to be implemented.
 
 ### WP6 — Robust optimization and paper validation
 
@@ -208,7 +231,7 @@ statistically superior.
 
 ## Immediate Next Implementation Milestone
 
-Generate and validate the new HOPR/PICLas volume mesh from the canonical STL,
-without reference to the foreign legacy mesh. Then run ADBSat and PICLas smoke
-cases on the same generated design before constructing the WP5 design. The two
-trajectory cases remain quarantined and are not prerequisites for WP4.
+Generate the WP5 geometry design, run the archived-WP1 common-random-number LF
+campaign, and select the initial HF geometries. Then construct L1 PICLas meshes
+only for those selected geometries and reserve L2 checks for the final reported
+designs. The two trajectory cases remain quarantined and are not prerequisites.

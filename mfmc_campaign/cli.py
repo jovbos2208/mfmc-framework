@@ -24,6 +24,7 @@ from .parametric_geometry import (
     build_gmsh_exterior_mesh,
     build_piclas_hdf5_mesh,
 )
+from .geometry_design import build_cylinder_hex_design, select_initial_hf_designs
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
@@ -223,6 +224,32 @@ def _cmd_generate_cylinder_hex(args: argparse.Namespace) -> int:
         uniform_scale_factor=args.uniform_scale,
         body_mesh_size_m=args.body_mesh_size_m,
         farfield_mesh_size_m=args.farfield_mesh_size_m,
+    )
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
+def _cmd_generate_cylinder_hex_design(args: argparse.Namespace) -> int:
+    summary = build_cylinder_hex_design(
+        args.output_dir,
+        n_designs=args.n_designs,
+        n_validation=args.n_validation,
+        seed=args.seed,
+        maximin_trials=args.maximin_trials,
+        uniform_scale_factor=args.uniform_scale,
+        adbsat_runtime_dir=args.adbsat_runtime_dir,
+    )
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
+def _cmd_select_cylinder_hex_initial_hf(args: argparse.Namespace) -> int:
+    summary = select_initial_hf_designs(
+        args.design_csv,
+        args.lf_metrics_csv,
+        args.output,
+        count=args.count,
+        objective_columns=args.objectives,
     )
     print(json.dumps(summary, indent=2))
     return 0
@@ -463,6 +490,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Gmsh characteristic length on outer-domain points",
     )
     p_geometry.set_defaults(func=_cmd_generate_cylinder_hex)
+
+    p_geometry_design = sub.add_parser(
+        "generate-cylinder-hex-design",
+        help="Generate the reproducible WP5 LF geometry design and untouched validation split",
+    )
+    p_geometry_design.add_argument("--output-dir", required=True)
+    p_geometry_design.add_argument("--n-designs", type=int, default=32)
+    p_geometry_design.add_argument("--n-validation", type=int, default=6)
+    p_geometry_design.add_argument("--seed", type=int, default=20260818)
+    p_geometry_design.add_argument("--maximin-trials", type=int, default=256)
+    p_geometry_design.add_argument("--uniform-scale", type=float, default=0.1)
+    p_geometry_design.add_argument(
+        "--adbsat-runtime-dir",
+        default=None,
+        help="Optional ADBSat-PyVersion directory; otherwise write a portable asset bundle",
+    )
+    p_geometry_design.set_defaults(func=_cmd_generate_cylinder_hex_design)
+
+    p_hf_select = sub.add_parser(
+        "select-cylinder-hex-initial-hf",
+        help="Select initial HF geometries from LF Pareto coverage and geometry-space filling",
+    )
+    p_hf_select.add_argument("--design-csv", required=True)
+    p_hf_select.add_argument("--lf-metrics-csv", required=True)
+    p_hf_select.add_argument("--output", required=True)
+    p_hf_select.add_argument("--count", type=int, default=6)
+    p_hf_select.add_argument(
+        "--objectives",
+        nargs="+",
+        default=["mean_drag", "std_drag", "q95_drag"],
+        help="LF metric columns minimized for Pareto coverage",
+    )
+    p_hf_select.set_defaults(func=_cmd_select_cylinder_hex_initial_hf)
 
     p_geometry_mesh = sub.add_parser(
         "mesh-cylinder-hex-exterior",
