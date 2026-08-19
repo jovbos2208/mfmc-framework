@@ -20,6 +20,8 @@ def main() -> int:
     parser.add_argument("--max-interaction", type=int, default=2)
     parser.add_argument("--target-hf-per-geometry", type=int, default=10)
     parser.add_argument("--acquisition-geometry-count", type=int, default=3)
+    parser.add_argument("--minimum-mf-relative-improvement", type=float, default=0.01)
+    parser.add_argument("--target-geometry-rmse", type=float, default=1.0e-4)
     args = parser.parse_args()
     result = fit_geometry_multifidelity_surrogate(
         args.bundle,
@@ -29,6 +31,8 @@ def main() -> int:
         max_interaction=args.max_interaction,
         target_hf_per_geometry=args.target_hf_per_geometry,
         acquisition_geometry_count=args.acquisition_geometry_count,
+        minimum_mf_relative_improvement=args.minimum_mf_relative_improvement,
+        target_geometry_rmse=args.target_geometry_rmse,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

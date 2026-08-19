@@ -24,6 +24,8 @@ def main() -> int:
     parser.add_argument("--n-tpmc", type=int, default=90)
     parser.add_argument("--gmsh", default="gmsh")
     parser.add_argument("--pyhope", default="pyhope")
+    parser.add_argument("--round-number", type=int, default=2)
+    parser.add_argument("--mpi-procs", type=int, default=128)
     args = parser.parse_args()
     result = build_round2_piclas_suite(
         args.selection, args.design_manifest, args.lf_config,
@@ -35,6 +37,8 @@ def main() -> int:
         n_tpmc=args.n_tpmc,
         gmsh_executable=args.gmsh,
         pyhope_executable=args.pyhope,
+        round_number=args.round_number,
+        mpi_procs=args.mpi_procs,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

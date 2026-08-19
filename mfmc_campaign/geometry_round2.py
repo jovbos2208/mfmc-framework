@@ -54,8 +54,11 @@ def select_round2_geometries(
     output_json: str | Path,
     *,
     count: int = 3,
+    round_number: int = 2,
 ) -> Dict[str, Any]:
     """Select new training geometries from objective, coverage and disagreement diagnostics."""
+    if round_number < 2:
+        raise ValueError("Sequential geometry acquisition starts at round 2")
     design = json.loads(Path(design_manifest_json).resolve().read_text(encoding="utf-8"))
     bundle = json.loads(Path(paired_bundle_json).resolve().read_text(encoding="utf-8"))
     surrogate = json.loads(Path(surrogate_manifest_json).resolve().read_text(encoding="utf-8"))
@@ -76,12 +79,21 @@ def select_round2_geometries(
     input_names = list(surrogate["input_names"])
     tpmc_model = SparsePCEModel.read_json(surrogate["models"]["tpmc"])
     delta_model = SparsePCEModel.read_json(surrogate["models"]["dsmc_minus_tpmc"])
+    model_selection = dict(surrogate.get("model_selection", {}))
+    selected_surrogate = str(model_selection.get("selected_surrogate", ""))
+    if selected_surrogate not in {"lf_pce", "mf_pce"}:
+        cv = {row["method"]: row for row in surrogate.get("geometry_held_out_summary", [])}
+        lf_rmse = float(cv["lf_pce"]["mean_geometry_rmse"])
+        mf_rmse = float(cv["mf_pce"]["mean_geometry_rmse"])
+        selected_surrogate = "mf_pce" if (lf_rmse - mf_rmse) / lf_rmse >= 0.01 else "lf_pce"
     samples = bundle["uncertainty_samples"]
     sample_ids = sorted(samples)
     diagnostics: list[Dict[str, Any]] = []
     for row in candidates:
         x = np.asarray([_model_inputs(input_names, row, samples[sample_id]) for sample_id in sample_ids])
-        prediction = tpmc_model.predict(x) + delta_model.predict(x)
+        prediction = tpmc_model.predict(x)
+        if selected_surrogate == "mf_pce":
+            prediction = prediction + delta_model.predict(x)
         diagnostics.append({
             "geometry_id": row["geometry_id"],
             "predicted_mean_drag": float(np.mean(prediction)),
@@ -141,12 +153,13 @@ def select_round2_geometries(
         })
     result = {
         "schema_version": 1,
-        "round": 2,
+        "round": int(round_number),
         "count": len(rows),
         "selected": rows,
         "previous_training_geometry_ids": sorted(current_ids),
         "untouched_validation_geometry_ids": sorted(validation_ids),
         "candidate_diagnostics": diagnostics,
+        "surrogate_used_for_acquisition": selected_surrogate,
     }
     target = Path(output_json).resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -174,9 +187,15 @@ def build_round2_piclas_suite(
     n_tpmc: int = 90,
     gmsh_executable: str = "gmsh",
     pyhope_executable: str = "pyhope",
+    round_number: int = 2,
+    mpi_procs: int = 128,
 ) -> Dict[str, Any]:
+    if round_number < 2:
+        raise ValueError("Sequential geometry acquisition starts at round 2")
+    if mpi_procs < 1:
+        raise ValueError("mpi_procs must be positive")
     if n_dsmc < 1 or n_tpmc < n_dsmc:
-        raise ValueError("Round 2 requires 1 <= n_dsmc <= n_tpmc")
+        raise ValueError("Sequential acquisition requires 1 <= n_dsmc <= n_tpmc")
     selection = json.loads(Path(selection_json).resolve().read_text(encoding="utf-8"))
     design_path = Path(design_manifest_json).resolve()
     design = json.loads(design_path.read_text(encoding="utf-8"))
@@ -185,7 +204,7 @@ def build_round2_piclas_suite(
     validation = set(selection["untouched_validation_geometry_ids"])
     selected_ids = [row["geometry_id"] for row in selection["selected"]]
     if validation.intersection(selected_ids):
-        raise ValueError("Round-2 selection contains an untouched validation geometry")
+        raise ValueError("Sequential selection contains an untouched validation geometry")
     design_rows = {row["geometry_id"]: row for row in design["designs"]}
     sample_indices = select_common_hf_samples(lf_config["samples"], n_tpmc)
     dsmc_indices = sample_indices[:n_dsmc]
@@ -231,9 +250,11 @@ def build_round2_piclas_suite(
             lf_config=lf_config,
             sample_indices=dsmc_indices,
         )
-        dsmc["request"]["study_id"] = "vleo_cylinder_hex_wp5_round2"
-        dsmc["request"]["cell_id"] = f"round2_dsmc_{geometry_id}"
-        dsmc["request"]["metadata"]["case_name"] = f"{geometry_id}_l1_round2_dsmc"
+        study_id = f"vleo_cylinder_hex_wp5_round{round_number}_{mpi_procs}proc"
+        dsmc["adapter"]["kwargs"]["mpi_procs"] = int(mpi_procs)
+        dsmc["request"]["study_id"] = study_id
+        dsmc["request"]["cell_id"] = f"round{round_number}_dsmc_{geometry_id}_{mpi_procs}proc"
+        dsmc["request"]["metadata"]["case_name"] = f"{geometry_id}_l1_round{round_number}_dsmc_{mpi_procs}proc"
         dsmc_path = config_root / f"{geometry_id}_dsmc.json"
         dsmc_path.write_text(json.dumps(dsmc, indent=2, sort_keys=True) + "\n")
         tpmc = deepcopy(dsmc)
@@ -241,14 +262,14 @@ def build_round2_piclas_suite(
         tpmc["adapter"]["fidelity"] = "lf"
         tpmc["adapter"]["kwargs"]["piclas_mode"] = "tpmc"
         tpmc["adapter"]["kwargs"]["submission_group_size"] = 10
-        tpmc["request"]["cell_id"] = f"round2_tpmc_{geometry_id}"
+        tpmc["request"]["cell_id"] = f"round{round_number}_tpmc_{geometry_id}_{mpi_procs}proc"
         tpmc["request"]["sample_ids"] = [f"wp1-crn-{index:04d}" for index in sample_indices]
         tpmc["request"]["samples"] = []
         for index in sample_indices:
             sample = deepcopy(lf_config["samples"][index])
             sample["random_seed"] = 20260900 + int(index)
             tpmc["request"]["samples"].append(sample)
-        tpmc["request"]["metadata"]["case_name"] = f"{geometry_id}_l1_round2_tpmc"
+        tpmc["request"]["metadata"]["case_name"] = f"{geometry_id}_l1_round{round_number}_tpmc_{mpi_procs}proc"
         tpmc_path = config_root / f"{geometry_id}_tpmc.json"
         tpmc_path.write_text(json.dumps(tpmc, indent=2, sort_keys=True) + "\n")
         rows.append({
@@ -268,7 +289,9 @@ def build_round2_piclas_suite(
         })
     suite = {
         "schema_version": 1,
-        "study_id": "vleo_cylinder_hex_wp5_round2",
+        "study_id": f"vleo_cylinder_hex_wp5_round{round_number}_{mpi_procs}proc",
+        "round": int(round_number),
+        "mpi_procs": int(mpi_procs),
         "mesh_level": "L1",
         "n_dsmc_per_geometry": n_dsmc,
         "n_tpmc_per_geometry": n_tpmc,
@@ -299,13 +322,14 @@ def merge_round2_results(
         (str(row["geometry_id"]), str(row["model_id"]), str(row["canonical_sample_id"])): index
         for index, row in enumerate(evaluations)
     }
+    round_number = int(suite.get("round", 2))
     new_rows = 0
     replaced_rows = 0
     for geometry in suite["geometries"]:
         geometry_id = geometry["geometry_id"]
         bundle["geometries"][geometry_id] = {
             "design": geometry["design"],
-            "round2_suite": {
+            f"round{round_number}_suite": {
                 key: geometry[key]
                 for key in (
                     "geometry_id", "manifest_json", "mesh_path", "mesh_reference",
@@ -361,7 +385,7 @@ def merge_round2_results(
         key = f"{row['geometry_id']}/{row['model_id']}"
         counts[key] = counts.get(key, 0) + 1
     bundle["counts"] = dict(sorted(counts.items()))
-    bundle["study_id"] = "vleo_cylinder_hex_wp5_paired_after_round2"
+    bundle["study_id"] = f"vleo_cylinder_hex_wp5_paired_after_round{round_number}"
     target = Path(output_json).resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")

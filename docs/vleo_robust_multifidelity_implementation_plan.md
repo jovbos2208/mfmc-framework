@@ -1,6 +1,6 @@
 # VLEO Multifidelity GSA and Robust Geometry Optimization
 
-Status: WP0--WP4 complete; WP5 surrogate and two sequential acquisition rounds implemented
+Status: WP0--WP4 complete; WP5 surrogate and three sequential acquisition rounds implemented
 
 ## Paper Through-Line
 
@@ -228,8 +228,15 @@ Implemented status:
   common-random-number L1 suites with five DSMC and 90 nested TPMC states per
   geometry, preserving the untouched validation split and the measured
   20-HF-equivalent budget approximation.
-- HF learning-curve aggregation across acquisition rounds remains to be
-  implemented.
+- Surrogate selection now requires at least one-percent geometry-held-out RMSE
+  improvement before applying the DSMC-minus-TPMC discrepancy model; otherwise
+  the validated TPMC PCE is retained without a forced correction.
+- Round 3 reuses the sequential selector and suite builder with explicit round
+  and MPI parameters, adds three more geometries at five DSMC plus 90 nested
+  TPMC states each, and fixes all solver jobs at 64 MPI processes.
+- The 6--9--12 geometry learning curve records LF/MF mean and median held-out
+  errors, the selected surrogate, and the predeclared `1e-4 m2` readiness
+  threshold. Fresh untouched-geometry validation remains a WP6 requirement.
 
 ### WP6 — Robust optimization and paper validation
 

@@ -128,6 +128,8 @@ def fit_geometry_multifidelity_surrogate(
     max_interaction: int = 2,
     target_hf_per_geometry: int = 10,
     acquisition_geometry_count: int = 3,
+    minimum_mf_relative_improvement: float = 0.01,
+    target_geometry_rmse: float = 1.0e-4,
 ) -> Dict[str, Any]:
     """Fit a DSMC-target WP5 surrogate and propose nested additional HF states.
 
@@ -135,6 +137,10 @@ def fit_geometry_multifidelity_surrogate(
     The corrected robust metrics use measured TPMC values plus the fitted DSMC
     discrepancy; they therefore apply to geometries already present in the bundle.
     """
+    if not 0.0 <= minimum_mf_relative_improvement < 1.0:
+        raise ValueError("minimum_mf_relative_improvement must be in [0, 1)")
+    if target_geometry_rmse <= 0.0:
+        raise ValueError("target_geometry_rmse must be positive")
     source = Path(bundle_json).resolve()
     payload = json.loads(source.read_text(encoding="utf-8"))
     if payload.get("reference_area_convention") != "canonical_manifest_area":
@@ -189,6 +195,23 @@ def fit_geometry_multifidelity_surrogate(
         for method, prediction in predictions.items():
             cv_rows.append({"held_out_geometry_id": held_out, "method": method, **regression_metrics(hf_y[hf_test], prediction)})
 
+    aggregate_cv = []
+    for method in sorted({str(row["method"]) for row in cv_rows}):
+        rows = [row for row in cv_rows if row["method"] == method]
+        aggregate_cv.append({
+            "method": method,
+            "mean_geometry_rmse": float(np.mean([float(row["rmse"]) for row in rows])),
+            "median_geometry_rmse": float(np.median([float(row["rmse"]) for row in rows])),
+        })
+    aggregate_by_method = {row["method"]: row for row in aggregate_cv}
+    lf_cv_rmse = float(aggregate_by_method["lf_pce"]["mean_geometry_rmse"])
+    mf_cv_rmse = float(aggregate_by_method["mf_pce"]["mean_geometry_rmse"])
+    relative_improvement = (lf_cv_rmse - mf_cv_rmse) / lf_cv_rmse
+    selected_surrogate = (
+        "mf_pce" if relative_improvement >= float(minimum_mf_relative_improvement) else "lf_pce"
+    )
+    correction_applied = selected_surrogate == "mf_pce"
+
     lf_model = _fit_model(
         lf_x, lf_y, input_names, lf_groups,
         degree=degree, q_norm=q_norm, max_interaction=max_interaction,
@@ -208,13 +231,17 @@ def fit_geometry_multifidelity_surrogate(
     for geometry_id in geometry_ids:
         keys = [key for key in lf_keys if key[0] == geometry_id]
         x = np.asarray([_build_inputs(payload, *key, uncertainty_names) for key in keys], dtype=float)
-        corrected = np.asarray([float(lf[key][qoi]) for key in keys]) + delta_model.predict(x)
+        selected_values = np.asarray([float(lf[key][qoi]) for key in keys])
+        if correction_applied:
+            selected_values = selected_values + delta_model.predict(x)
         full_inputs_by_geometry[geometry_id] = x
         metric_rows.append({
             "geometry_id": geometry_id,
             "n_tpmc": len(keys),
             "n_dsmc": sum(key[0] == geometry_id for key in hf_keys),
-            **_robust_metrics(corrected),
+            "selected_surrogate": selected_surrogate,
+            "dsmc_discrepancy_applied": correction_applied,
+            **_robust_metrics(selected_values),
         })
     metric_rows.sort(key=lambda row: (float(row["q95_drag"]), float(row["mean_drag"]), row["geometry_id"]))
     baseline = next((row for row in metric_rows if row["geometry_id"].endswith("_000")), metric_rows[0])
@@ -248,30 +275,32 @@ def fit_geometry_multifidelity_surrogate(
 
     cv_path = target / "geometry_held_out_metrics.csv"
     metrics_path = target / "corrected_robust_metrics.csv"
+    selected_metrics_path = target / "selected_robust_metrics.csv"
     acquisition_path = target / "next_hf_acquisition.json"
     _write_csv(cv_path, cv_rows)
     _write_csv(metrics_path, metric_rows)
+    _write_csv(selected_metrics_path, metric_rows)
     acquisition_path.write_text(json.dumps({"schema_version": 1, "geometries": acquisitions}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    aggregate_cv = []
-    for method in sorted({str(row["method"]) for row in cv_rows}):
-        rows = [row for row in cv_rows if row["method"] == method]
-        aggregate_cv.append({
-            "method": method,
-            "mean_geometry_rmse": float(np.mean([float(row["rmse"]) for row in rows])),
-            "median_geometry_rmse": float(np.median([float(row["rmse"]) for row in rows])),
-        })
     hf_counts = {geometry_id: int(np.count_nonzero(hf_groups == geometry_id)) for geometry_id in geometry_ids}
     quality_flags: list[str] = []
-    if len(geometry_ids) < 10:
-        quality_flags.append("hf_geometry_count_lt_10")
+    if len(geometry_ids) < 12:
+        quality_flags.append("hf_geometry_count_lt_12")
     minimum_hf = min(hf_counts.values())
-    if minimum_hf < 10:
-        quality_flags.append("minimum_hf_pairs_per_geometry_lt_10")
+    if minimum_hf < 5:
+        quality_flags.append("minimum_hf_pairs_per_training_geometry_lt_5")
     if len(set(hf_counts.values())) > 1:
         quality_flags.append("unbalanced_hf_pairs_across_geometries")
+    selected_cv_rmse = mf_cv_rmse if correction_applied else lf_cv_rmse
+    geometry_count_ready = len(geometry_ids) >= 12
+    accuracy_ready = selected_cv_rmse <= float(target_geometry_rmse)
+    status = (
+        "surrogate_ready_for_optimization_candidate"
+        if geometry_count_ready and accuracy_ready
+        else "surrogate_complete_more_geometry_acquisition_required"
+    )
     summary = {
         "schema_version": 1,
-        "status": "pilot_surrogate_complete_more_hf_required",
+        "status": status,
         "bundle_json": str(source),
         "qoi": qoi,
         "input_names": input_names,
@@ -281,12 +310,25 @@ def fit_geometry_multifidelity_surrogate(
         "hf_counts_by_geometry": hf_counts,
         "quality_flags": quality_flags,
         "geometry_held_out_summary": aggregate_cv,
+        "model_selection": {
+            "selected_surrogate": selected_surrogate,
+            "correction_applied": correction_applied,
+            "lf_pce_mean_geometry_rmse": lf_cv_rmse,
+            "mf_pce_mean_geometry_rmse": mf_cv_rmse,
+            "relative_mf_improvement": relative_improvement,
+            "minimum_relative_improvement_required": float(minimum_mf_relative_improvement),
+            "target_geometry_rmse": float(target_geometry_rmse),
+            "selected_geometry_rmse": selected_cv_rmse,
+            "geometry_count_ready": geometry_count_ready,
+            "accuracy_ready": accuracy_ready,
+        },
         "models": {
             "tpmc": str(model_dir / "tpmc_pce.json"),
             "dsmc_minus_tpmc": str(model_dir / "dsmc_minus_tpmc_pce.json"),
         },
         "geometry_held_out_metrics_csv": str(cv_path),
         "corrected_robust_metrics_csv": str(metrics_path),
+        "selected_robust_metrics_csv": str(selected_metrics_path),
         "next_hf_acquisition_json": str(acquisition_path),
     }
     manifest_path = target / "geometry_mf_surrogate_manifest.json"

@@ -67,12 +67,17 @@ def test_round2_selection_excludes_existing_and_validation_geometries(tmp_path: 
     surrogate.write_text(json.dumps({
         "input_names": ["geometry__nose_length_fraction"],
         "models": {"tpmc": str(tpmc), "dsmc_minus_tpmc": str(delta)},
+        "model_selection": {"selected_surrogate": "lf_pce"},
     }))
-    result = select_round2_geometries(design, metrics, bundle, surrogate, tmp_path / "selection.json", count=3)
+    result = select_round2_geometries(
+        design, metrics, bundle, surrogate, tmp_path / "selection.json", count=3, round_number=3
+    )
     selected = {row["geometry_id"] for row in result["selected"]}
     assert len(selected) == 3
     assert not selected.intersection(ids[:2])
     assert ids[6] not in selected
+    assert result["round"] == 3
+    assert result["surrogate_used_for_acquisition"] == "lf_pce"
 
 
 def test_round2_merge_adds_new_geometry_and_both_fidelities(tmp_path: Path) -> None:
@@ -89,7 +94,7 @@ def test_round2_merge_adds_new_geometry_and_both_fidelities(tmp_path: Path) -> N
         "mesh_reference": "geometry/mesh.h5", "n_tetrahedra": 1, "n_hexahedra": 4,
         "hdf5_fingerprint": "abc", "selection_order": 0, "selection_basis": "test",
     }
-    suite.write_text(json.dumps({"geometries": [geometry]}))
+    suite.write_text(json.dumps({"round": 3, "geometries": [geometry]}))
     for model_id, sample_id in (("PICLas_DSMC", "hf-crn-0003"), ("PICLas_TPMC", "wp1-crn-0003")):
         result_dir = tmp_path / "runs" / geometry_id / model_id
         result_dir.mkdir(parents=True)
@@ -103,3 +108,5 @@ def test_round2_merge_adds_new_geometry_and_both_fidelities(tmp_path: Path) -> N
     assert merged["selected_geometry_ids"] == [geometry_id]
     assert merged["counts"][f"{geometry_id}/PICLas_DSMC"] == 1
     assert merged["counts"][f"{geometry_id}/PICLas_TPMC"] == 1
+    assert "round3_suite" in merged["geometries"][geometry_id]
+    assert merged["study_id"].endswith("round3")

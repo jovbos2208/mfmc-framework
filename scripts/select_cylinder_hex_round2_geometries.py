@@ -19,10 +19,11 @@ def main() -> int:
     parser.add_argument("--surrogate-manifest", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--count", type=int, default=3)
+    parser.add_argument("--round-number", type=int, default=2)
     args = parser.parse_args()
     result = select_round2_geometries(
         args.design_manifest, args.sentman_metrics, args.bundle,
-        args.surrogate_manifest, args.output, count=args.count,
+        args.surrogate_manifest, args.output, count=args.count, round_number=args.round_number,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
