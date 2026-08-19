@@ -1,6 +1,6 @@
 # VLEO Multifidelity GSA and Robust Geometry Optimization
 
-Status: WP0--WP3 complete; WP4 analytical geometry generator implemented
+Status: WP0--WP4 complete; WP5 pilot surrogate and first sequential acquisition implemented
 
 ## Paper Through-Line
 
@@ -217,8 +217,14 @@ Implemented status:
 - The initial-HF suite builder creates L1 meshes only for selected designs and
   selects five common, space-filling WP1 uncertainty states per geometry (30
   initial DSMC runs). A restartable suite driver submits and collects them.
-- Sequential HF acquisition after this pilot and HF learning curves remain to
-  be implemented.
+- A WP5 DSMC-target geometry/uncertainty surrogate workflow now consumes the
+  auditable paired bundle, fits TPMC and DSMC-minus-TPMC sparse PCEs, and writes
+  leave-one-geometry-out diagnostics. It also produces corrected 256-state
+  robust metrics and a deterministic nested TPMC-state plan for the next HF
+  acquisition. The pilot remains explicitly quality-flagged until those new HF
+  samples are collected.
+- HF learning curves and acquisition of entirely new geometry locations remain
+  to be implemented.
 
 ### WP6 — Robust optimization and paper validation
 

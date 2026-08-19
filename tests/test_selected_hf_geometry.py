@@ -6,6 +6,7 @@ from pathlib import Path
 from mfmc_campaign.geometry_design import build_cylinder_hex_design
 from mfmc_campaign.selected_hf_geometry import (
     _workflow_config,
+    build_sequential_hf_suite,
     build_selected_hf_suite,
     select_common_hf_samples,
 )
@@ -115,3 +116,51 @@ def test_suite_builds_only_selected_nonvalidation_geometries(tmp_path: Path, mon
         row["geometry_id"] for row in suite["geometries"]
     )
     assert all((tmp_path / row["workflow_config"]).is_file() for row in suite["geometries"])
+
+
+def test_sequential_suite_reuses_mesh_and_inserts_acquired_samples(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    config_dir = tmp_path / "configs" / "initial"
+    config_dir.mkdir(parents=True)
+    geometry_ids = ["cylinder_hex_wp5_000", "cylinder_hex_wp5_008"]
+    initial_rows = []
+    for geometry_id in geometry_ids:
+        config_path = config_dir / f"{geometry_id}.json"
+        config_path.write_text(json.dumps({
+            "request": {
+                "geometry": {"id": geometry_id, "tags": ["initial"]},
+                "metadata": {"case_name": "initial"},
+                "sample_ids": ["hf-crn-0001"],
+                "samples": [{"x": 1.0}],
+            }
+        }))
+        initial_rows.append({
+            "geometry_id": geometry_id,
+            "workflow_config": str(config_path.relative_to(tmp_path)),
+            "mesh_reference": f"geometry/{geometry_id}_mesh.h5",
+        })
+    initial = tmp_path / "initial.json"
+    initial.write_text(json.dumps({
+        "mesh_level": "L1", "untouched_validation_geometry_ids": ["validation"],
+        "geometries": initial_rows,
+    }))
+    selected_ids = ["wp1-crn-0003", "wp1-crn-0007"]
+    acquisition = tmp_path / "acquisition.json"
+    acquisition.write_text(json.dumps({"geometries": [
+        {"geometry_id": geometry_id, "selected_canonical_sample_ids": selected_ids}
+        for geometry_id in geometry_ids
+    ]}))
+    bundle = tmp_path / "bundle.json"
+    bundle.write_text(json.dumps({"uncertainty_samples": {
+        "wp1-crn-0003": {"x": 3.0}, "wp1-crn-0007": {"x": 7.0},
+    }}))
+    suite = build_sequential_hf_suite(
+        initial, acquisition, bundle,
+        config_output_dir=tmp_path / "configs" / "next",
+        suite_output_json=tmp_path / "next_suite.json",
+    )
+    assert suite["total_hf_runs"] == 4
+    assert suite["common_canonical_sample_ids"] == selected_ids
+    generated = json.loads((tmp_path / suite["geometries"][0]["workflow_config"]).read_text())
+    assert generated["request"]["sample_ids"] == ["hf-crn-0003", "hf-crn-0007"]
+    assert [row["x"] for row in generated["request"]["samples"]] == [3.0, 7.0]
