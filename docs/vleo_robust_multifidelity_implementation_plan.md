@@ -1,6 +1,6 @@
 # VLEO Multifidelity GSA and Robust Geometry Optimization
 
-Status: WP0--WP4 complete; WP5 pilot surrogate and first sequential acquisition implemented
+Status: WP0--WP4 complete; WP5 surrogate and two sequential acquisition rounds implemented
 
 ## Paper Through-Line
 
@@ -223,8 +223,13 @@ Implemented status:
   robust metrics and a deterministic nested TPMC-state plan for the next HF
   acquisition. The pilot remains explicitly quality-flagged until those new HF
   samples are collected.
-- HF learning curves and acquisition of entirely new geometry locations remain
-  to be implemented.
+- Round 2 selects entirely new training geometries using predicted robust
+  objective, geometry-space coverage, and TPMC--Sentman disagreement. It builds
+  common-random-number L1 suites with five DSMC and 90 nested TPMC states per
+  geometry, preserving the untouched validation split and the measured
+  20-HF-equivalent budget approximation.
+- HF learning-curve aggregation across acquisition rounds remains to be
+  implemented.
 
 ### WP6 — Robust optimization and paper validation
 

@@ -260,7 +260,15 @@ def fit_geometry_multifidelity_surrogate(
             "mean_geometry_rmse": float(np.mean([float(row["rmse"]) for row in rows])),
             "median_geometry_rmse": float(np.median([float(row["rmse"]) for row in rows])),
         })
-    quality_flags = ["pilot_only_six_hf_geometries", "five_hf_pairs_per_geometry"]
+    hf_counts = {geometry_id: int(np.count_nonzero(hf_groups == geometry_id)) for geometry_id in geometry_ids}
+    quality_flags: list[str] = []
+    if len(geometry_ids) < 10:
+        quality_flags.append("hf_geometry_count_lt_10")
+    minimum_hf = min(hf_counts.values())
+    if minimum_hf < 10:
+        quality_flags.append("minimum_hf_pairs_per_geometry_lt_10")
+    if len(set(hf_counts.values())) > 1:
+        quality_flags.append("unbalanced_hf_pairs_across_geometries")
     summary = {
         "schema_version": 1,
         "status": "pilot_surrogate_complete_more_hf_required",
@@ -270,6 +278,7 @@ def fit_geometry_multifidelity_surrogate(
         "n_geometries": len(geometry_ids),
         "n_hf": len(hf_y),
         "n_lf": len(lf_y),
+        "hf_counts_by_geometry": hf_counts,
         "quality_flags": quality_flags,
         "geometry_held_out_summary": aggregate_cv,
         "models": {
