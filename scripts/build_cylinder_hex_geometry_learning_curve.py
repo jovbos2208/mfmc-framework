@@ -18,6 +18,7 @@ def main() -> int:
     parser.add_argument("--minimum-mf-relative-improvement", type=float, default=0.01)
     parser.add_argument("--target-geometry-rmse", type=float, default=1.0e-4)
     parser.add_argument("--minimum-geometry-count", type=int, default=12)
+    parser.add_argument("--require-balanced-training", action="store_true")
     args = parser.parse_args()
     result = build_geometry_learning_curve(
         args.manifests,
@@ -25,6 +26,7 @@ def main() -> int:
         minimum_mf_relative_improvement=args.minimum_mf_relative_improvement,
         target_geometry_rmse=args.target_geometry_rmse,
         minimum_geometry_count=args.minimum_geometry_count,
+        require_balanced_training=args.require_balanced_training,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

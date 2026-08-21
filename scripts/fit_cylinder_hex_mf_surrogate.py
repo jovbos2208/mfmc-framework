@@ -22,6 +22,12 @@ def main() -> int:
     parser.add_argument("--acquisition-geometry-count", type=int, default=3)
     parser.add_argument("--minimum-mf-relative-improvement", type=float, default=0.01)
     parser.add_argument("--target-geometry-rmse", type=float, default=1.0e-4)
+    parser.add_argument("--training-lf-per-geometry", type=int)
+    parser.add_argument("--training-hf-per-geometry", type=int)
+    parser.add_argument(
+        "--balance-reference-bundle",
+        help="Bundle whose all-geometry CRN intersection defines identical training states",
+    )
     args = parser.parse_args()
     result = fit_geometry_multifidelity_surrogate(
         args.bundle,
@@ -33,6 +39,9 @@ def main() -> int:
         acquisition_geometry_count=args.acquisition_geometry_count,
         minimum_mf_relative_improvement=args.minimum_mf_relative_improvement,
         target_geometry_rmse=args.target_geometry_rmse,
+        training_lf_per_geometry=args.training_lf_per_geometry,
+        training_hf_per_geometry=args.training_hf_per_geometry,
+        balance_reference_bundle_json=args.balance_reference_bundle,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

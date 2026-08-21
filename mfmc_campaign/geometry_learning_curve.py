@@ -32,17 +32,21 @@ def build_geometry_learning_curve(
     minimum_mf_relative_improvement: float = 0.01,
     target_geometry_rmse: float = 1.0e-4,
     minimum_geometry_count: int = 12,
+    require_balanced_training: bool = False,
 ) -> Dict[str, Any]:
     if len(manifest_paths) < 2:
         raise ValueError("At least two surrogate manifests are required for a learning curve")
     if minimum_geometry_count < 2 or target_geometry_rmse <= 0.0:
         raise ValueError("Learning-curve geometry count and RMSE targets must be positive")
     rows: list[Dict[str, Any]] = []
+    balances: list[Dict[str, Any] | None] = []
     for value in manifest_paths:
         path = Path(value).resolve()
         manifest = json.loads(path.read_text(encoding="utf-8"))
         cv = {row["method"]: row for row in manifest["geometry_held_out_summary"]}
         selection = _selection(manifest, minimum_mf_relative_improvement)
+        balance = manifest.get("training_sample_balance")
+        balances.append(dict(balance) if balance and balance.get("enabled") else None)
         rows.append({
             "n_geometries": int(manifest["n_geometries"]),
             "n_hf": int(manifest["n_hf"]),
@@ -62,6 +66,44 @@ def build_geometry_learning_curve(
     rows.sort(key=lambda row: (int(row["n_geometries"]), int(row["n_hf"])))
     if len({int(row["n_geometries"]) for row in rows}) != len(rows):
         raise ValueError("Learning-curve manifests must have distinct geometry counts")
+    if require_balanced_training and not all(balance is not None for balance in balances):
+        raise ValueError("Every learning-curve manifest must certify balanced CRN training")
+    balanced_training_verified = False
+    balance_summary: Dict[str, Any] | None = None
+    if any(balance is not None for balance in balances):
+        if not all(balance is not None for balance in balances):
+            raise ValueError("Cannot mix balanced and unbalanced training manifests in one learning curve")
+        assert all(balance is not None for balance in balances)
+        first = balances[0]
+        assert first is not None
+        signature = (
+            first.get("lf_per_geometry"),
+            first.get("hf_per_geometry"),
+            first.get("lf_canonical_sample_ids"),
+            first.get("hf_canonical_sample_ids"),
+        )
+        if any((
+            balance.get("lf_per_geometry"),
+            balance.get("hf_per_geometry"),
+            balance.get("lf_canonical_sample_ids"),
+            balance.get("hf_canonical_sample_ids"),
+        ) != signature for balance in balances if balance is not None):
+            raise ValueError("Balanced learning-curve manifests do not use identical LF/HF CRN states")
+        lf_per_geometry = int(first["lf_per_geometry"])
+        hf_per_geometry = int(first["hf_per_geometry"])
+        if any(
+            int(row["n_lf"]) != int(row["n_geometries"]) * lf_per_geometry
+            or int(row["n_hf"]) != int(row["n_geometries"]) * hf_per_geometry
+            for row in rows
+        ):
+            raise ValueError("Manifest training counts are inconsistent with the declared CRN balance")
+        balanced_training_verified = True
+        balance_summary = {
+            "lf_per_geometry": lf_per_geometry,
+            "hf_per_geometry": hf_per_geometry,
+            "lf_canonical_sample_ids": first["lf_canonical_sample_ids"],
+            "hf_canonical_sample_ids": first["hf_canonical_sample_ids"],
+        }
     target = Path(output_dir).resolve()
     target.mkdir(parents=True, exist_ok=True)
     csv_path = target / "geometry_learning_curve.csv"
@@ -93,6 +135,8 @@ def build_geometry_learning_curve(
         "minimum_mf_relative_improvement": float(minimum_mf_relative_improvement),
         "target_geometry_rmse": float(target_geometry_rmse),
         "minimum_geometry_count": int(minimum_geometry_count),
+        "balanced_training_verified": balanced_training_verified,
+        "training_sample_balance": balance_summary,
         "rows": rows,
         "learning_curve_csv": str(csv_path),
     }

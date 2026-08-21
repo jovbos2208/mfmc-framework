@@ -58,6 +58,50 @@ def _evaluation_lookup(payload: Mapping[str, Any], model_id: str) -> Dict[tuple[
     return lookup
 
 
+def _common_sample_ids(
+    payload: Mapping[str, Any], model_id: str, geometry_ids: Sequence[str]
+) -> list[str]:
+    lookup = _evaluation_lookup(payload, model_id)
+    common: set[str] | None = None
+    for geometry_id in geometry_ids:
+        available = {sample_id for candidate_geometry, sample_id in lookup if candidate_geometry == geometry_id}
+        common = available if common is None else common & available
+    return sorted(common or set())
+
+
+def _balanced_training_ids(
+    payload: Mapping[str, Any],
+    reference_payload: Mapping[str, Any],
+    geometry_ids: Sequence[str],
+    *,
+    model_id: str,
+    count: int | None,
+) -> list[str] | None:
+    if count is None:
+        return None
+    if count < 1:
+        raise ValueError(f"Balanced {model_id} count must be positive")
+    reference_geometry_ids = [str(value) for value in reference_payload["selected_geometry_ids"]]
+    common = _common_sample_ids(reference_payload, model_id, reference_geometry_ids)
+    if len(common) < count:
+        raise ValueError(
+            f"Balance reference has only {len(common)} common {model_id} samples; {count} requested"
+        )
+    selected = common[:count]
+    available = _evaluation_lookup(payload, model_id)
+    missing = [
+        (geometry_id, sample_id)
+        for geometry_id in geometry_ids
+        for sample_id in selected
+        if (geometry_id, sample_id) not in available
+    ]
+    if missing:
+        raise ValueError(
+            f"Bundle is missing {len(missing)} balanced {model_id} evaluations; first missing pair: {missing[0]}"
+        )
+    return selected
+
+
 def _fit_model(
     x: np.ndarray,
     y: np.ndarray,
@@ -130,12 +174,16 @@ def fit_geometry_multifidelity_surrogate(
     acquisition_geometry_count: int = 3,
     minimum_mf_relative_improvement: float = 0.01,
     target_geometry_rmse: float = 1.0e-4,
+    training_lf_per_geometry: int | None = None,
+    training_hf_per_geometry: int | None = None,
+    balance_reference_bundle_json: str | Path | None = None,
 ) -> Dict[str, Any]:
     """Fit a DSMC-target WP5 surrogate and propose nested additional HF states.
 
     Geometry-held-out folds are used for the honest generalization diagnostic.
-    The corrected robust metrics use measured TPMC values plus the fitted DSMC
-    discrepancy; they therefore apply to geometries already present in the bundle.
+    Optional balanced training uses identical common-random-number states for every
+    geometry and every learning-curve stage. Robust metrics still use every TPMC
+    evaluation available for each geometry.
     """
     if not 0.0 <= minimum_mf_relative_improvement < 1.0:
         raise ValueError("minimum_mf_relative_improvement must be in [0, 1)")
@@ -152,22 +200,45 @@ def fit_geometry_multifidelity_surrogate(
     geometry_ids = [str(value) for value in payload["selected_geometry_ids"]]
     uncertainty_names = _numeric_uncertainty_columns(payload["uncertainty_samples"])
     input_names = [f"geometry__{name}" for name in VARIABLES] + [f"input__{name}" for name in uncertainty_names]
-    hf = _evaluation_lookup(payload, "PICLas_DSMC")
-    lf = _evaluation_lookup(payload, "PICLas_TPMC")
-    if not hf or not lf:
+    hf_all = _evaluation_lookup(payload, "PICLas_DSMC")
+    lf_all = _evaluation_lookup(payload, "PICLas_TPMC")
+    if not hf_all or not lf_all:
         raise ValueError("Bundle must contain PICLas_DSMC and PICLas_TPMC evaluations")
+
+    reference_source = Path(balance_reference_bundle_json).resolve() if balance_reference_bundle_json else source
+    reference_payload = (
+        json.loads(reference_source.read_text(encoding="utf-8"))
+        if reference_source != source
+        else payload
+    )
+    selected_lf_ids = _balanced_training_ids(
+        payload, reference_payload, geometry_ids,
+        model_id="PICLas_TPMC", count=training_lf_per_geometry,
+    )
+    selected_hf_ids = _balanced_training_ids(
+        payload, reference_payload, geometry_ids,
+        model_id="PICLas_DSMC", count=training_hf_per_geometry,
+    )
+    lf = {
+        key: row for key, row in lf_all.items()
+        if key[0] in geometry_ids and (selected_lf_ids is None or key[1] in selected_lf_ids)
+    }
+    hf = {
+        key: row for key, row in hf_all.items()
+        if key[0] in geometry_ids and (selected_hf_ids is None or key[1] in selected_hf_ids)
+    }
 
     lf_keys = sorted(lf)
     lf_x = np.asarray([_build_inputs(payload, *key, uncertainty_names) for key in lf_keys], dtype=float)
     lf_y = np.asarray([float(lf[key][qoi]) for key in lf_keys], dtype=float)
     lf_groups = np.asarray([key[0] for key in lf_keys], dtype=str)
     hf_keys = sorted(hf)
-    missing_pairs = [key for key in hf_keys if key not in lf]
+    missing_pairs = [key for key in hf_keys if key not in lf_all]
     if missing_pairs:
         raise ValueError(f"TPMC is missing {len(missing_pairs)} DSMC pairs")
     hf_x = np.asarray([_build_inputs(payload, *key, uncertainty_names) for key in hf_keys], dtype=float)
     hf_y = np.asarray([float(hf[key][qoi]) for key in hf_keys], dtype=float)
-    paired_lf_y = np.asarray([float(lf[key][qoi]) for key in hf_keys], dtype=float)
+    paired_lf_y = np.asarray([float(lf_all[key][qoi]) for key in hf_keys], dtype=float)
     hf_groups = np.asarray([key[0] for key in hf_keys], dtype=str)
     residual_y = hf_y - paired_lf_y
 
@@ -228,17 +299,19 @@ def fit_geometry_multifidelity_surrogate(
 
     metric_rows: list[Dict[str, Any]] = []
     full_inputs_by_geometry: Dict[str, np.ndarray] = {}
+    all_lf_keys = sorted(key for key in lf_all if key[0] in geometry_ids)
+    all_hf_keys = sorted(key for key in hf_all if key[0] in geometry_ids)
     for geometry_id in geometry_ids:
-        keys = [key for key in lf_keys if key[0] == geometry_id]
+        keys = [key for key in all_lf_keys if key[0] == geometry_id]
         x = np.asarray([_build_inputs(payload, *key, uncertainty_names) for key in keys], dtype=float)
-        selected_values = np.asarray([float(lf[key][qoi]) for key in keys])
+        selected_values = np.asarray([float(lf_all[key][qoi]) for key in keys])
         if correction_applied:
             selected_values = selected_values + delta_model.predict(x)
         full_inputs_by_geometry[geometry_id] = x
         metric_rows.append({
             "geometry_id": geometry_id,
             "n_tpmc": len(keys),
-            "n_dsmc": sum(key[0] == geometry_id for key in hf_keys),
+            "n_dsmc": sum(key[0] == geometry_id for key in all_hf_keys),
             "selected_surrogate": selected_surrogate,
             "dsmc_discrepancy_applied": correction_applied,
             **_robust_metrics(selected_values),
@@ -257,8 +330,8 @@ def fit_geometry_multifidelity_surrogate(
             break
     acquisitions: list[Dict[str, Any]] = []
     for geometry_id in acquisition_geometries:
-        existing = sorted(key[1] for key in hf_keys if key[0] == geometry_id)
-        candidates = sorted(key[1] for key in lf_keys if key[0] == geometry_id and key[1] not in existing)
+        existing = sorted(key[1] for key in all_hf_keys if key[0] == geometry_id)
+        candidates = sorted(key[1] for key in all_lf_keys if key[0] == geometry_id and key[1] not in existing)
         candidate_x = np.asarray([_build_inputs(payload, geometry_id, sample_id, uncertainty_names) for sample_id in candidates])
         anchor_x = np.asarray([_build_inputs(payload, geometry_id, sample_id, uncertainty_names) for sample_id in existing])
         additional = max(0, target_hf_per_geometry - len(existing))
@@ -307,7 +380,17 @@ def fit_geometry_multifidelity_surrogate(
         "n_geometries": len(geometry_ids),
         "n_hf": len(hf_y),
         "n_lf": len(lf_y),
+        "available_n_hf": len(all_hf_keys),
+        "available_n_lf": len(all_lf_keys),
         "hf_counts_by_geometry": hf_counts,
+        "training_sample_balance": {
+            "enabled": selected_lf_ids is not None or selected_hf_ids is not None,
+            "reference_bundle_json": str(reference_source),
+            "lf_per_geometry": training_lf_per_geometry,
+            "hf_per_geometry": training_hf_per_geometry,
+            "lf_canonical_sample_ids": selected_lf_ids,
+            "hf_canonical_sample_ids": selected_hf_ids,
+        },
         "quality_flags": quality_flags,
         "geometry_held_out_summary": aggregate_cv,
         "model_selection": {

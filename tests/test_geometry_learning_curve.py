@@ -18,6 +18,19 @@ def _manifest(path: Path, n: int, lf_rmse: float, mf_rmse: float) -> None:
     }))
 
 
+def _balanced_manifest(path: Path, n: int, sample_suffix: str = "") -> None:
+    _manifest(path, n, 1.2e-4, 1.19e-4)
+    payload = json.loads(path.read_text())
+    payload["training_sample_balance"] = {
+        "enabled": True,
+        "lf_per_geometry": 90,
+        "hf_per_geometry": 5,
+        "lf_canonical_sample_ids": [f"lf-{sample_suffix}{index}" for index in range(90)],
+        "hf_canonical_sample_ids": [f"hf-{sample_suffix}{index}" for index in range(5)],
+    }
+    path.write_text(json.dumps(payload))
+
+
 def test_learning_curve_selects_lf_when_mf_gain_is_below_threshold(tmp_path: Path) -> None:
     first = tmp_path / "six.json"
     second = tmp_path / "nine.json"
@@ -28,3 +41,15 @@ def test_learning_curve_selects_lf_when_mf_gain_is_below_threshold(tmp_path: Pat
     assert all(row["selected_surrogate"] == "lf_pce" for row in result["rows"])
     assert result["status"] == "target_met"
     assert Path(result["learning_curve_csv"]).is_file()
+
+
+def test_learning_curve_verifies_identical_balanced_crns(tmp_path: Path) -> None:
+    first = tmp_path / "six.json"
+    second = tmp_path / "twelve.json"
+    _balanced_manifest(first, 6)
+    _balanced_manifest(second, 12)
+    result = build_geometry_learning_curve(
+        [first, second], tmp_path / "curve", require_balanced_training=True
+    )
+    assert result["balanced_training_verified"] is True
+    assert result["training_sample_balance"]["lf_per_geometry"] == 90

@@ -237,6 +237,23 @@ Implemented status:
 - The 6--9--12 geometry learning curve records LF/MF mean and median held-out
   errors, the selected surrogate, and the predeclared `1e-4 m2` readiness
   threshold. Fresh untouched-geometry validation remains a WP6 requirement.
+- A balanced offline rerun now forces every learning-curve stage to use exactly
+  the same 90 TPMC and five DSMC common-random-number states per geometry. The
+  12-geometry bundle defines the intersection, manifests record the exact sample
+  IDs, and the learning-curve builder rejects mixed or inconsistent balances.
+  All available TPMC samples remain available for final robust-metric estimates.
+- A two-stage fallback fits separate anisotropic Matern-5/2 Gaussian processes
+  from the four normalized geometry variables to empirical TPMC mean drag,
+  standard deviation, and 95th percentile. Nonparametric bootstrap variances
+  provide heteroskedastic observation noise, and every reported validation value
+  comes from a complete leave-one-geometry-out refit. JSON model artifacts are
+  directly reloadable without pickle.
+- `run_cylinder_hex_balanced_surrogate_comparison.py` runs the balanced PCE
+  learning curve and 12-geometry metric-GP validation without new solver jobs.
+  Its predeclared decision rule prefers the joint PCE if it meets the absolute
+  held-out target, otherwise the metric GP if all metric-specific relative-RMSE
+  targets pass; failure of both triggers geometry acquisition rather than more
+  DSMC states at already sampled geometries.
 
 ### WP6 — Robust optimization and paper validation
 
@@ -255,7 +272,8 @@ statistically superior.
 
 ## Immediate Next Implementation Milestone
 
-Generate the WP5 geometry design, run the archived-WP1 common-random-number LF
-campaign, and select the initial HF geometries. Then construct L1 PICLas meshes
-only for those selected geometries and reserve L2 checks for the final reported
-designs. The two trajectory cases remain quarantined and are not prerequisites.
+Run the balanced offline PCE/metric-GP comparison on the completed 6-, 9-, and
+12-geometry bundles. If one model path passes its held-out target, proceed to
+WP6 optimization and reserve the six untouched geometries for the final paired
+validation. If neither passes, acquire new training geometries; do not spend the
+next budget on additional DSMC states at the existing twelve geometries.

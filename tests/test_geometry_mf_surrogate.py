@@ -82,3 +82,55 @@ def test_merge_sequential_hf_results_adds_drag_area_rows(tmp_path: Path) -> None
     merged = json.loads((tmp_path / "merged.json").read_text())
     assert merged["evaluations"][0]["canonical_sample_id"] == "wp1-crn-0007"
     assert merged["evaluations"][0]["drag_area_m2"] == 0.005
+
+
+def test_balanced_training_uses_reference_crn_intersection_but_all_lf_for_metrics(tmp_path: Path) -> None:
+    geometry_ids = [f"cylinder_hex_wp5_{index:03d}" for index in range(4)]
+    sample_ids = [f"wp1-crn-{index:04d}" for index in range(7)]
+    evaluations = []
+    geometries = {}
+    uncertainty = {sample_id: {"state": index / 6.0} for index, sample_id in enumerate(sample_ids)}
+    for geometry_index, geometry_id in enumerate(geometry_ids):
+        geometries[geometry_id] = {
+            "design": {f"normalized_{name}": 0.1 + 0.2 * geometry_index for name in VARIABLES}
+        }
+        for sample_index, sample_id in enumerate(sample_ids):
+            tpmc = 0.003 + 1.0e-4 * geometry_index + 1.0e-5 * sample_index
+            evaluations.append({
+                "geometry_id": geometry_id, "canonical_sample_id": sample_id,
+                "model_id": "PICLas_TPMC", "drag_area_m2": tpmc,
+            })
+            if sample_index < 3:
+                evaluations.append({
+                    "geometry_id": geometry_id, "canonical_sample_id": sample_id,
+                    "model_id": "PICLas_DSMC",
+                    "drag_area_m2": tpmc + 1.0e-5 * (geometry_index + 1),
+                })
+    payload = {
+        "qoi": "drag_area_m2",
+        "reference_area_convention": "canonical_manifest_area",
+        "selected_geometry_ids": geometry_ids,
+        "geometries": geometries,
+        "uncertainty_samples": uncertainty,
+        "evaluations": evaluations,
+    }
+    bundle = tmp_path / "bundle.json"
+    bundle.write_text(json.dumps(payload))
+    result = fit_geometry_multifidelity_surrogate(
+        bundle,
+        tmp_path / "balanced",
+        degree=1,
+        max_interaction=1,
+        training_lf_per_geometry=5,
+        training_hf_per_geometry=2,
+        balance_reference_bundle_json=bundle,
+    )
+    assert result["n_lf"] == 20
+    assert result["n_hf"] == 8
+    assert result["available_n_lf"] == 28
+    assert result["available_n_hf"] == 12
+    balance = result["training_sample_balance"]
+    assert balance["lf_canonical_sample_ids"] == sample_ids[:5]
+    assert balance["hf_canonical_sample_ids"] == sample_ids[:2]
+    rows = list(__import__("csv").DictReader(Path(result["selected_robust_metrics_csv"]).open()))
+    assert all(int(row["n_tpmc"]) == 7 for row in rows)
