@@ -7,6 +7,8 @@ the low-fidelity control variate. Both `C_D` and `C_D2` are recorded.
 From the repository root, validate and start the restartable run with:
 
 ```bash
+module purge
+module load gcc/15.2.0 openmpi/5.0.9 hdf5/1.14.6 python/3.14.3
 source .venv/bin/activate
 mfmc-campaign validate-config \
   configs/studies/pilot_correlation/GOCE_high_aoa_aos_moment_correlation.yaml
