@@ -1,0 +1,15 @@
+blocks:
+  - {name: environment.density}
+  - {name: environment.composition}
+  - {name: environment.temperature}
+  - {name: environment.winds}
+  - {name: attitude.dispersion}
+  - {name: gsi.energy_accommodation}
+  - {name: gsi.cll_parameters}
+  - {name: gsi.surface_temperature}
+  - {name: numerical.particle_noise}
+  - {name: numerical.time_step}
+  - {name: numerical.particle_weighting}
+  - {name: numerical.sampling_window}
+  - {name: numerical.mesh}
+  - {name: operations.ballistic_coefficient}

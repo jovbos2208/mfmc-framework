@@ -1,0 +1,140 @@
+sources_ref: ../../registries/paper_b_sources.yaml
+geometries_ref: ../../registries/paper_b_geometries.yaml
+
+regimes:
+  - id: GOCE_HIGH_ATTITUDE_244KM
+    label: GOCE high-AoA/AoS TPMC--Sentman moment-correlation screen at 244 km
+    descriptors:
+      altitude_km: 244.14592193
+      characteristic_length: 5.0
+      knudsen_number: 0.0
+      speed_ratio: 8.0
+      freestream_temperature: 961.226929
+      composition_descriptor: O=0.725,N2=0.260,O2=0.011,He=0.003
+      solar_activity_state: reconstructed_goce_20131021_d3
+      geomagnetic_activity_state: reconstructed_goce_20131021_d3
+      wind_state: fixed_at_regime_baseline
+      orbit_class: GOCE_reentry_phase_candidate
+      local_time_class: trajectory_conditioned_baseline
+      datetime_utc: '2013-10-23T11:59:14+00:00'
+      lat_deg: -59.795608906
+      lon_deg: -77.410888066
+      local_solar_time_h: 6.826496351
+      density_kg_m3: 6.946359459858e-11
+      relative_speed_mps: 7802.648218
+      x_o_fraction: 0.725
+      x_n2_fraction: 0.260
+      x_o2_fraction: 0.011
+      x_he_fraction: 0.003
+      # [rho, n_N2, n_O2, n_O, n_He, n_H, n_N, n_Ar, n_H2, n_NO, T]
+      atmosphere_row:
+        - 6.946359459858e-11
+        - 565105240048187.2
+        - 24345136236146.46
+        - 1574886736255370.0
+        - 6452491923730.388
+        - 0.0
+        - 0.0
+        - 0.0
+        - 0.0
+        - 0.0
+        - 961.226929
+      geometry_class: streamlined
+      surface_state: proxy_bounded
+
+study:
+  id: pilot_corr_goce_high_aoa_aos_tpmc_sentman_moments
+  mode: source_isolation
+  active_source_blocks:
+    - attitude.dispersion
+
+geometries:
+  - id: GOCE
+
+variables:
+  - name: aos_deg
+    source_block: attitude.dispersion
+    distribution:
+      kind: uniform
+      params:
+        low: -15.0
+        high: 15.0
+    baseline: 0.0
+    bounds: [-25.0, 25.0]
+  - name: aoa_deg
+    source_block: attitude.dispersion
+    distribution:
+      kind: uniform
+      params:
+        low: -15.0
+        high: 15.0
+    baseline: 0.0
+    bounds: [-25.0, 25.0]
+
+sampling:
+  method: independent
+  sample_count: 80
+  max_production_samples: 80
+
+models:
+  lf_strategy: multi
+  hf:
+    id: PICLas_TPMC
+    kind: legacy_piclas
+    kwargs:
+      simulator_module: PICLas_prandtl
+      mpi_procs: 64
+      piclas_mode: tpmc
+      submission_group_size: 10
+  lf:
+    - id: Sentman
+      kind: legacy_adbsat
+      method: Sentman
+      kwargs:
+        simulator_module: ADBSat_prandtl
+        base_dir: ADBSat-PyVersion
+  available_qois:
+    PICLas_TPMC: [C_D, C_D2]
+    Sentman: [C_D, C_D2]
+
+qois:
+  direct: [C_D, C_D2]
+  derived: []
+  batch_cd_cd2: true
+
+pilot:
+  size: 80
+  sizes: [30, 80]
+  robustness_repetitions: 200
+  dir: campaign_outputs/pilot_correlation/goce_high_aoa_aos_tpmc_sentman_moments
+  allow_external_with_trajectory: false
+  reuse_external_model_evaluation_stats: false
+  reuse_across_budgets: true
+
+budget:
+  min_hf: 1
+  hf_fraction: 1.0
+  total: [80.0]
+
+repetitions: 1
+
+seeds:
+  global: 20260825
+
+outputs:
+  dir: campaign_outputs/pilot_correlation/goce_high_aoa_aos_tpmc_sentman_moments
+  write_parquet: false
+  write_model_evaluations: true
+  write_config_snapshot: true
+  plots: true
+
+execution:
+  backend: legacy_slurm
+  resume: true
+  aos_deg: 0.0
+  flow_zero_direction: [-1.0, 0.0, 0.0]
+  adbsat_aos_offset_deg: 0.0
+  environment:
+    model: csv
+    use_winds: false
+    apply_wind_to_speed: true

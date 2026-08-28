@@ -1,0 +1,36 @@
+geometries:
+  - id: Cube
+    name: Cube
+    characteristic_length: 0.1
+    geometry_class: bluff_body
+    tags: [paper_b]
+    metadata:
+      hf_mesh: Cube_mesh.h5
+      lf_model: Cube
+  - id: SOAR
+    name: SOAR
+    characteristic_length: 1.2
+    geometry_class: appendage_bus
+    tags: [optional]
+    metadata:
+      hf_mesh: SOAR_mesh.h5
+      lf_model: SOAR
+  - id: GOCE
+    name: GOCE
+    characteristic_length: 5.0
+    geometry_class: streamlined
+    tags: [paper_b]
+    metadata:
+      hf_mesh: GOCE_mesh.h5
+      lf_model: GOCE
+      reference_area_m2: 0.0236561598414
+      reference_area_source: GOCE_2019_OBJ_half_total_surface
+  - id: CHAMP
+    name: CHAMP
+    characteristic_length: 2.0
+    geometry_class: asymmetric
+    tags: [paper_b]
+    metadata:
+      hf_mesh: CHAMP_mesh.h5
+      lf_model: CHAMP
+      macro_particle_factor_scale: 0.2
