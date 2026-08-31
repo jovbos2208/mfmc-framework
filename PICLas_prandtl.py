@@ -940,7 +940,7 @@ class PiclasSimulator:
             if not output_files:
                 raise FileNotFoundError(f"Keine output*.vtu Dateien gefunden in {subdir}")
             area_file = output_files[0]
-            areas, _A_wetted = cell_areas_and_total(area_file)
+            areas, A_wetted = cell_areas_and_total(area_file)
             A_ref = wind_projected_reference_area(area_file, flow_dir, areas)
             # Preserve the established moment convention while drag/lift use
             # the wind-projected reference area.

@@ -33,6 +33,7 @@ if str(UPDATE_PARAMETER_DIR) not in sys.path:
     sys.path.insert(0, str(UPDATE_PARAMETER_DIR))
 
 from PICLas import PiclasSimulator, _boundary3_source_name
+from PICLas_prandtl import PiclasSimulator as PrandtlPiclasSimulator
 import update_parameter as piclas_update
 from calc.environment import environment as adbsat_environment
 
@@ -551,6 +552,34 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
         self.assertAlmostEqual(expected_cm[0], qois["C_Mx"][0], places=12)
         self.assertAlmostEqual(expected_cm[1], qois["C_My"][0], places=12)
         self.assertAlmostEqual(expected_cm[2], qois["C_Mz"][0], places=12)
+        self.assertEqual([4.0], cpu_h)
+
+    def test_prandtl_piclas_collect_results_qois_uses_wetted_area_for_moment_length(self):
+        force_per_area = np.asarray([[0.0, -1.0, 0.5], [0.0, -2.0, 1.5]], dtype=float)
+        centers = np.asarray([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], dtype=float)
+
+        with tempfile.TemporaryDirectory() as td:
+            for name in ["output1.vtu", "output2.vtu"]:
+                open(os.path.join(td, name), "w", encoding="utf-8").close()
+            with open(os.path.join(td, "dyn_p.txt"), "w", encoding="utf-8") as f:
+                f.write("2.0\n")
+            with open(os.path.join(td, "cpu_time.txt"), "w", encoding="utf-8") as f:
+                f.write("3600000\n")
+
+            sim = PrandtlPiclasSimulator(mpi_procs=4)
+            with patch(
+                "PICLas_prandtl.cell_areas_and_total",
+                return_value=(np.asarray([2.0, 2.0], dtype=float), 4.0),
+            ), patch(
+                "PICLas_prandtl.wind_projected_reference_area", return_value=1.0
+            ), patch(
+                "PICLas_prandtl.pv.read", return_value=_FakeMesh(force_per_area, centers)
+            ):
+                qois, cpu_h = sim.collect_results_qois([td], AoS=[0.0], AoA=[0.0])
+
+        self.assertAlmostEqual(1.0, qois["C_Mx"][0], places=12)
+        self.assertAlmostEqual(-0.25, qois["C_My"][0], places=12)
+        self.assertAlmostEqual(-0.5, qois["C_Mz"][0], places=12)
         self.assertEqual([4.0], cpu_h)
 
     def test_prepare_simulation_folder_uses_geometry_specific_mesh_and_project(self):
