@@ -188,14 +188,14 @@ def build_round2_piclas_suite(
     gmsh_executable: str = "gmsh",
     pyhope_executable: str = "pyhope",
     round_number: int = 2,
-    mpi_procs: int = 128,
+    mpi_procs: int = 64,
 ) -> Dict[str, Any]:
     if round_number < 2:
         raise ValueError("Sequential geometry acquisition starts at round 2")
     if mpi_procs < 1:
         raise ValueError("mpi_procs must be positive")
-    if n_dsmc < 1 or n_tpmc < n_dsmc:
-        raise ValueError("Sequential acquisition requires 1 <= n_dsmc <= n_tpmc")
+    if n_dsmc < 0 or n_tpmc < 1 or n_tpmc < n_dsmc:
+        raise ValueError("Sequential acquisition requires 0 <= n_dsmc <= n_tpmc and n_tpmc >= 1")
     selection = json.loads(Path(selection_json).resolve().read_text(encoding="utf-8"))
     design_path = Path(design_manifest_json).resolve()
     design = json.loads(design_path.read_text(encoding="utf-8"))
@@ -241,23 +241,27 @@ def build_round2_piclas_suite(
             gmsh = build_gmsh_exterior_mesh(manifest_path, gmsh_executable=gmsh_executable)
             h5 = build_piclas_hdf5_mesh(manifest_path, pyhope_executable=pyhope_executable)
             mesh_path = Path(h5["mesh_path"])
+        hdf5_area = h5.get("x_projected_reference_area_m2")
+        if hdf5_area is None:
+            raise ValueError(f"HDF5 mesh validation did not provide a reference area: {mesh_path}")
+        manifest_area = float(design_row["reference_area_m2"])
+        if not np.isclose(float(hdf5_area), manifest_area, rtol=1.0e-6, atol=1.0e-14):
+            raise ValueError(
+                f"HDF5 reference area mismatch for {geometry_id}: {hdf5_area} != {manifest_area}"
+            )
         mesh_reference = _relative_to_repository(mesh_path, piclas_root)
-        dsmc = _workflow_config(
+        common = _workflow_config(
             base,
             geometry_id=geometry_id,
             mesh_reference=mesh_reference,
             reference_area_m2=float(design_row["reference_area_m2"]),
             lf_config=lf_config,
-            sample_indices=dsmc_indices,
+            sample_indices=sample_indices,
         )
         study_id = f"vleo_cylinder_hex_wp5_round{round_number}_{mpi_procs}proc"
-        dsmc["adapter"]["kwargs"]["mpi_procs"] = int(mpi_procs)
-        dsmc["request"]["study_id"] = study_id
-        dsmc["request"]["cell_id"] = f"round{round_number}_dsmc_{geometry_id}_{mpi_procs}proc"
-        dsmc["request"]["metadata"]["case_name"] = f"{geometry_id}_l1_round{round_number}_dsmc_{mpi_procs}proc"
-        dsmc_path = config_root / f"{geometry_id}_dsmc.json"
-        dsmc_path.write_text(json.dumps(dsmc, indent=2, sort_keys=True) + "\n")
-        tpmc = deepcopy(dsmc)
+        common["adapter"]["kwargs"]["mpi_procs"] = int(mpi_procs)
+        common["request"]["study_id"] = study_id
+        tpmc = deepcopy(common)
         tpmc["adapter"]["model_id"] = "PICLas_TPMC"
         tpmc["adapter"]["fidelity"] = "lf"
         tpmc["adapter"]["kwargs"]["piclas_mode"] = "tpmc"
@@ -272,7 +276,7 @@ def build_round2_piclas_suite(
         tpmc["request"]["metadata"]["case_name"] = f"{geometry_id}_l1_round{round_number}_tpmc_{mpi_procs}proc"
         tpmc_path = config_root / f"{geometry_id}_tpmc.json"
         tpmc_path.write_text(json.dumps(tpmc, indent=2, sort_keys=True) + "\n")
-        rows.append({
+        suite_row = {
             "selection_order": selection_row["selection_order"],
             "selection_basis": selection_row["selection_basis"],
             "geometry_id": geometry_id,
@@ -281,12 +285,28 @@ def build_round2_piclas_suite(
             "mesh_path": _relative_to_repository(mesh_path, repository_root),
             "mesh_reference": mesh_reference,
             "reference_area_m2": float(design_row["reference_area_m2"]),
+            "hdf5_reference_area_m2": float(hdf5_area),
             "n_tetrahedra": gmsh.get("n_tetrahedra"),
             "n_hexahedra": h5.get("nElems"),
             "hdf5_fingerprint": h5.get("mesh_fingerprint"),
-            "dsmc_workflow_config": _relative_to_repository(dsmc_path, repository_root),
             "tpmc_workflow_config": _relative_to_repository(tpmc_path, repository_root),
-        })
+        }
+        if n_dsmc:
+            dsmc = deepcopy(common)
+            dsmc["request"]["cell_id"] = f"round{round_number}_dsmc_{geometry_id}_{mpi_procs}proc"
+            dsmc["request"]["sample_ids"] = [f"hf-crn-{index:04d}" for index in dsmc_indices]
+            dsmc["request"]["samples"] = []
+            for index in dsmc_indices:
+                sample = deepcopy(lf_config["samples"][index])
+                sample["random_seed"] = 20260900 + int(index)
+                dsmc["request"]["samples"].append(sample)
+            dsmc["request"]["metadata"]["case_name"] = (
+                f"{geometry_id}_l1_round{round_number}_dsmc_{mpi_procs}proc"
+            )
+            dsmc_path = config_root / f"{geometry_id}_dsmc.json"
+            dsmc_path.write_text(json.dumps(dsmc, indent=2, sort_keys=True) + "\n")
+            suite_row["dsmc_workflow_config"] = _relative_to_repository(dsmc_path, repository_root)
+        rows.append(suite_row)
     suite = {
         "schema_version": 1,
         "study_id": f"vleo_cylinder_hex_wp5_round{round_number}_{mpi_procs}proc",

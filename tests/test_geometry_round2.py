@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
 from mfmc_campaign.geometry_design import VARIABLES
-from mfmc_campaign.geometry_round2 import merge_round2_results, select_round2_geometries
+from mfmc_campaign.geometry_round2 import (
+    build_round2_piclas_suite,
+    merge_round2_results,
+    select_round2_geometries,
+)
 from mfmc_campaign.sparse_pce import SparsePCEModel
 
 
@@ -110,3 +116,77 @@ def test_round2_merge_adds_new_geometry_and_both_fidelities(tmp_path: Path) -> N
     assert merged["counts"][f"{geometry_id}/PICLas_TPMC"] == 1
     assert "round3_suite" in merged["geometries"][geometry_id]
     assert merged["study_id"].endswith("round3")
+
+
+def test_round2_builder_supports_clean_tpmc_only_suite(tmp_path: Path) -> None:
+    geometry_id = "cylinder_hex_wp5_004"
+    previous = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        selection = tmp_path / "selection.json"
+        selection.write_text(json.dumps({
+            "selected": [{
+                "geometry_id": geometry_id,
+                "selection_order": 0,
+                "selection_basis": "mfmc_test",
+            }],
+            "untouched_validation_geometry_ids": ["cylinder_hex_wp5_031"],
+        }))
+        design_root = tmp_path / "design"
+        source_dir = design_root / "designs" / geometry_id
+        source_dir.mkdir(parents=True)
+        source_manifest = source_dir / f"{geometry_id}.manifest.json"
+        source_manifest.write_text(json.dumps({
+            "specification": {},
+            "provenance": {"uniform_linear_scale_factor": 0.1},
+        }))
+        design = design_root / "geometry_design_manifest.json"
+        design.write_text(json.dumps({"designs": [{
+            "geometry_id": geometry_id,
+            "manifest_path": f"designs/{geometry_id}/{geometry_id}.manifest.json",
+            "reference_area_m2": 0.002,
+        }]}))
+        lf = tmp_path / "lf.json"
+        lf.write_text(json.dumps({
+            "regime": {},
+            "metadata": {},
+            "samples": [{"state": value} for value in (0.0, 0.5, 1.0)],
+        }))
+        base = tmp_path / "base.json"
+        base.write_text(json.dumps({
+            "adapter": {"model_id": "PICLas_DSMC", "fidelity": "hf", "kwargs": {}},
+            "request": {},
+        }))
+        geometry_dir = tmp_path / "piclas" / "geometry" / geometry_id
+        geometry_dir.mkdir(parents=True)
+        generated_manifest = geometry_dir / f"{geometry_id}.manifest.json"
+        generated_manifest.write_text(json.dumps({"assets": {}}))
+        mesh = geometry_dir / f"{geometry_id}_mesh.h5"
+        mesh.write_bytes(b"test")
+        with patch(
+            "mfmc_campaign.geometry_round2.build_geometry_assets",
+            return_value={"manifest_json": str(generated_manifest)},
+        ), patch(
+            "mfmc_campaign.geometry_round2.validate_piclas_hdf5_mesh",
+            return_value={"valid": True, "nElems": 4, "mesh_fingerprint": "abc", "x_projected_reference_area_m2": 0.002},
+        ):
+            result = build_round2_piclas_suite(
+                selection,
+                design,
+                lf,
+                output_root=tmp_path / "piclas" / "geometry",
+                config_output_dir=tmp_path / "configs",
+                suite_output_json=tmp_path / "suite.json",
+                base_config_json=base,
+                n_dsmc=0,
+                n_tpmc=3,
+                round_number=4,
+                mpi_procs=64,
+            )
+        row = result["geometries"][0]
+        assert "tpmc_workflow_config" in row
+        assert "dsmc_workflow_config" not in row
+        assert result["total_dsmc_runs"] == 0
+        assert result["total_tpmc_runs"] == 3
+    finally:
+        os.chdir(previous)

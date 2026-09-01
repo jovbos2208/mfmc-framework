@@ -772,6 +772,8 @@ def validate_piclas_hdf5_mesh(path: str | Path) -> Dict[str, Any]:
             decoded = value.decode("utf-8") if isinstance(value, (bytes, np.bytes_)) else str(value)
             boundary_names.append(decoded.strip().upper())
         node_coordinates = np.asarray(mesh_file["NodeCoords"][...], dtype=float)
+        elem_info = np.asarray(mesh_file["ElemInfo"][...], dtype=int)
+        side_info = np.asarray(mesh_file["SideInfo"][...], dtype=int)
         attributes = {
             key: int(mesh_file.attrs[key])
             for key in ("Ngeo", "nBCs", "nElems", "nNodes", "nSides", "nUniqueNodes", "nUniqueSides")
@@ -780,6 +782,46 @@ def validate_piclas_hdf5_mesh(path: str | Path) -> Dict[str, Any]:
         pyhope_version = str(mesh_file.attrs.get("PyHOPEVersion", "unknown"))
 
     expected_boundaries = {"IN", "OUT", "CYLINDER_HEX"}
+    object_bc_ids = [index + 1 for index, name in enumerate(boundary_names) if name == "CYLINDER_HEX"]
+    face_nodes = {
+        1: [0, 1, 2, 3], 2: [4, 5, 6, 7], 3: [0, 1, 5, 4],
+        4: [1, 2, 6, 5], 5: [2, 3, 7, 6], 6: [3, 0, 4, 7],
+    }
+
+    def resolve_side(side_id: int) -> np.ndarray | None:
+        current = abs(int(side_id))
+        seen: set[int] = set()
+        for _ in range(32):
+            if current <= 0 or current > len(side_info) or current in seen:
+                return None
+            seen.add(current)
+            row = side_info[current - 1]
+            if int(row[2]) > 0 and int(row[3]) // 10 in face_nodes:
+                return row
+            current = abs(int(row[1]))
+        return None
+
+    twice_projected_area = 0.0
+    for boundary_row in side_info[np.isin(side_info[:, 4], object_bc_ids)]:
+        side_row = resolve_side(int(boundary_row[1]))
+        if side_row is None:
+            continue
+        elem_index = int(side_row[2]) - 1
+        face_id = int(side_row[3]) // 10
+        if elem_index < 0 or elem_index >= len(elem_info):
+            continue
+        start, stop = int(elem_info[elem_index, 4]), int(elem_info[elem_index, 5])
+        element_nodes = node_coordinates[start:stop]
+        if len(element_nodes) < 8:
+            continue
+        points = element_nodes[face_nodes[face_id]]
+        area_vector = np.zeros(3, dtype=float)
+        for point_index in range(1, len(points) - 1):
+            area_vector += 0.5 * np.cross(
+                points[point_index] - points[0], points[point_index + 1] - points[0]
+            )
+        twice_projected_area += abs(float(area_vector[0]))
+    projected_reference_area = 0.5 * twice_projected_area
     checks = {
         "required_datasets_present": not missing,
         "finite_node_coordinates": bool(node_coordinates.size and np.all(np.isfinite(node_coordinates))),
@@ -792,6 +834,7 @@ def validate_piclas_hdf5_mesh(path: str | Path) -> Dict[str, Any]:
         "mesh_fingerprint": hashlib.sha256(source.read_bytes()).hexdigest(),
         "boundary_names": boundary_names,
         "pyhope_version": pyhope_version,
+        "x_projected_reference_area_m2": float(projected_reference_area),
         **attributes,
     }
 

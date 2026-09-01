@@ -24,11 +24,17 @@ def main() -> int:
     repository_root = Path.cwd().resolve()
     suite = json.loads(Path(args.suite).resolve().read_text(encoding="utf-8"))
     run_root = Path(args.run_root).resolve()
-    fidelities = ("dsmc", "tpmc") if args.fidelity == "all" else (args.fidelity,)
     summaries = []
     for geometry in suite["geometries"]:
         geometry_id = geometry["geometry_id"]
+        available = tuple(
+            fidelity for fidelity in ("dsmc", "tpmc")
+            if f"{fidelity}_workflow_config" in geometry
+        )
+        fidelities = available if args.fidelity == "all" else (args.fidelity,)
         for fidelity in fidelities:
+            if fidelity not in available:
+                raise ValueError(f"Suite has no {fidelity} workflow for {geometry_id}")
             model_id = "PICLas_DSMC" if fidelity == "dsmc" else "PICLas_TPMC"
             config = load_workflow_config(repository_root / geometry[f"{fidelity}_workflow_config"])
             work = run_root / geometry_id / model_id

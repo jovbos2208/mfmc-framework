@@ -20,12 +20,12 @@ def main() -> int:
     parser.add_argument("--config-output-dir", default="configs/studies/cylinder_hex_wp5_round2")
     parser.add_argument("--suite-output", default="outputs/cylinder_hex/wp5_round2/suite.json")
     parser.add_argument("--base-config", default="configs/studies/cylinder_hex_piclas_adapter_l1_5seeds.json")
-    parser.add_argument("--n-dsmc", type=int, default=5)
+    parser.add_argument("--n-dsmc", type=int, default=5, help="Set to zero for a TPMC-only MFMC optimization suite")
     parser.add_argument("--n-tpmc", type=int, default=90)
     parser.add_argument("--gmsh", default="gmsh")
     parser.add_argument("--pyhope", default="pyhope")
     parser.add_argument("--round-number", type=int, default=2)
-    parser.add_argument("--mpi-procs", type=int, default=128)
+    parser.add_argument("--mpi-procs", type=int, default=64)
     args = parser.parse_args()
     result = build_round2_piclas_suite(
         args.selection, args.design_manifest, args.lf_config,
