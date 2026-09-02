@@ -830,15 +830,24 @@ def validate_piclas_hdf5_mesh(path: str | Path) -> Dict[str, Any]:
 
     expected_boundaries = {"IN", "OUT", "CYLINDER_HEX"}
     object_bc_ids = [index + 1 for index, name in enumerate(boundary_names) if name == "CYLINDER_HEX"]
+    # PyHOPE writes linear hexahedron nodes in tensor-product order rather
+    # than CGNS/MeshIO corner order. Its local sides are ordered
+    # (z-, y-, x+, y+, x-, z+).
     face_nodes = {
-        1: [0, 1, 2, 3], 2: [4, 5, 6, 7], 3: [0, 1, 5, 4],
-        4: [1, 2, 6, 5], 5: [2, 3, 7, 6], 6: [3, 0, 4, 7],
+        1: [0, 1, 3, 2],
+        2: [0, 1, 5, 4],
+        3: [1, 3, 7, 5],
+        4: [2, 3, 7, 6],
+        5: [0, 2, 6, 4],
+        6: [4, 5, 7, 6],
     }
 
     twice_projected_area = 0.0
     object_boundary_side_count = 0
     resolved_object_boundary_side_count = 0
     for element_row in elem_info:
+        if abs(int(element_row[0])) % 10 != 8:
+            continue
         side_start, side_stop = int(element_row[2]), int(element_row[3])
         if side_start < 0 or side_stop > len(side_info) or side_stop < side_start:
             continue

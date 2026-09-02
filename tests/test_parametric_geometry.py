@@ -148,12 +148,12 @@ def test_piclas_hdf5_reference_area_uses_element_owned_local_sides(tmp_path: Pat
         [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
             [0.0, 1.0, 0.0],
+            [1.0, 1.0, 0.0],
             [0.0, 0.0, 1.0],
             [1.0, 0.0, 1.0],
-            [1.0, 1.0, 1.0],
             [0.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0],
         ]
     )
     # GlobalSideID values deliberately do not point to SideInfo rows. HOPR
