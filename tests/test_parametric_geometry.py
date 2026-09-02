@@ -141,6 +141,41 @@ def test_piclas_hdf5_structural_validation(tmp_path: Path) -> None:
     assert report["nElems"] == 1
 
 
+def test_piclas_hdf5_reference_area_uses_element_owned_local_sides(tmp_path: Path) -> None:
+    h5py = pytest.importorskip("h5py")
+    mesh_path = tmp_path / "unit_cube_mesh.h5"
+    node_coordinates = np.asarray(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ]
+    )
+    # GlobalSideID values deliberately do not point to SideInfo rows. HOPR
+    # stores ownership through ElemInfo's side range, not through this ID.
+    side_info = np.zeros((6, 5), dtype=np.int64)
+    side_info[:, 1] = np.arange(101, 107)
+    side_info[:, 4] = 3
+    with h5py.File(mesh_path, "w") as mesh_file:
+        mesh_file.attrs.update({"Ngeo": 1, "nBCs": 3, "nElems": 1, "nNodes": 8, "nSides": 6})
+        mesh_file.create_dataset("BCNames", data=np.asarray([b"IN", b"OUT", b"CYLINDER_HEX"], dtype="S255"))
+        mesh_file.create_dataset("BCType", data=np.zeros((3, 4), dtype=np.int64))
+        mesh_file.create_dataset("ElemInfo", data=np.asarray([[118, 1, 0, 6, 0, 8]], dtype=np.int64))
+        mesh_file.create_dataset("NodeCoords", data=node_coordinates)
+        mesh_file.create_dataset("SideInfo", data=side_info)
+
+    report = validate_piclas_hdf5_mesh(mesh_path)
+
+    assert report["x_projected_reference_area_m2"] == pytest.approx(1.0)
+    assert report["object_boundary_side_count"] == 6
+    assert report["resolved_object_boundary_side_count"] == 6
+
+
 def test_pyhope_scaled_jacobian_histogram_parser_handles_ansi_output() -> None:
     output = (
         "\x1b[1m│<0.0      │\x1b[0m 0.00\n"

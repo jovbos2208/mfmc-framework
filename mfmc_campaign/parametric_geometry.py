@@ -812,6 +812,22 @@ def validate_piclas_hdf5_mesh(path: str | Path) -> Dict[str, Any]:
         }
         pyhope_version = str(mesh_file.attrs.get("PyHOPEVersion", "unknown"))
 
+    def rows_with_columns(values: np.ndarray, columns: int, name: str) -> np.ndarray:
+        """Return HOPR tables in row-major form, accepting transposed HDF5 arrays."""
+        if values.ndim != 2:
+            raise ParametricGeometryError(f"{name} must be a two-dimensional array")
+        if values.shape[1] == columns:
+            return values
+        if values.shape[0] == columns:
+            return values.T
+        raise ParametricGeometryError(
+            f"{name} has incompatible shape {values.shape}; expected {columns} columns"
+        )
+
+    node_coordinates = rows_with_columns(node_coordinates, 3, "NodeCoords")
+    elem_info = rows_with_columns(elem_info, 6, "ElemInfo")
+    side_info = rows_with_columns(side_info, 5, "SideInfo")
+
     expected_boundaries = {"IN", "OUT", "CYLINDER_HEX"}
     object_bc_ids = [index + 1 for index, name in enumerate(boundary_names) if name == "CYLINDER_HEX"]
     face_nodes = {
@@ -819,39 +835,37 @@ def validate_piclas_hdf5_mesh(path: str | Path) -> Dict[str, Any]:
         4: [1, 2, 6, 5], 5: [2, 3, 7, 6], 6: [3, 0, 4, 7],
     }
 
-    def resolve_side(side_id: int) -> np.ndarray | None:
-        current = abs(int(side_id))
-        seen: set[int] = set()
-        for _ in range(32):
-            if current <= 0 or current > len(side_info) or current in seen:
-                return None
-            seen.add(current)
-            row = side_info[current - 1]
-            if int(row[2]) > 0 and int(row[3]) // 10 in face_nodes:
-                return row
-            current = abs(int(row[1]))
-        return None
-
     twice_projected_area = 0.0
-    for boundary_row in side_info[np.isin(side_info[:, 4], object_bc_ids)]:
-        side_row = resolve_side(int(boundary_row[1]))
-        if side_row is None:
+    object_boundary_side_count = 0
+    resolved_object_boundary_side_count = 0
+    for element_row in elem_info:
+        side_start, side_stop = int(element_row[2]), int(element_row[3])
+        if side_start < 0 or side_stop > len(side_info) or side_stop < side_start:
             continue
-        elem_index = int(side_row[2]) - 1
-        face_id = int(side_row[3]) // 10
-        if elem_index < 0 or elem_index >= len(elem_info):
-            continue
-        start, stop = int(elem_info[elem_index, 4]), int(elem_info[elem_index, 5])
-        element_nodes = node_coordinates[start:stop]
-        if len(element_nodes) < 8:
-            continue
-        points = element_nodes[face_nodes[face_id]]
-        area_vector = np.zeros(3, dtype=float)
-        for point_index in range(1, len(points) - 1):
-            area_vector += 0.5 * np.cross(
-                points[point_index] - points[0], points[point_index + 1] - points[0]
-            )
-        twice_projected_area += abs(float(area_vector[0]))
+        # ElemInfo owns this contiguous SideInfo range. The first six entries
+        # correspond to local hexahedron faces 1..6; subsequent entries, when
+        # present, describe mortar sub-sides rather than additional hex faces.
+        for local_side_offset, side_row in enumerate(side_info[side_start:side_stop]):
+            if int(side_row[4]) not in object_bc_ids:
+                continue
+            object_boundary_side_count += 1
+            face_id = local_side_offset + 1
+            if face_id not in face_nodes:
+                continue
+            start, stop = int(element_row[4]), int(element_row[5])
+            if start < 0 or stop > len(node_coordinates) or stop < start:
+                continue
+            element_nodes = node_coordinates[start:stop]
+            if len(element_nodes) < 8:
+                continue
+            points = element_nodes[face_nodes[face_id]]
+            area_vector = np.zeros(3, dtype=float)
+            for point_index in range(1, len(points) - 1):
+                area_vector += 0.5 * np.cross(
+                    points[point_index] - points[0], points[point_index + 1] - points[0]
+                )
+            twice_projected_area += abs(float(area_vector[0]))
+            resolved_object_boundary_side_count += 1
     projected_reference_area = 0.5 * twice_projected_area
     checks = {
         "required_datasets_present": not missing,
@@ -866,6 +880,8 @@ def validate_piclas_hdf5_mesh(path: str | Path) -> Dict[str, Any]:
         "boundary_names": boundary_names,
         "pyhope_version": pyhope_version,
         "x_projected_reference_area_m2": float(projected_reference_area),
+        "object_boundary_side_count": object_boundary_side_count,
+        "resolved_object_boundary_side_count": resolved_object_boundary_side_count,
         **attributes,
     }
 
