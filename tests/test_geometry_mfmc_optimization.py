@@ -13,6 +13,7 @@ from mfmc_campaign.geometry_mfmc_optimization import (
     confidence_aware_pareto_ids,
     decide_optimization_stop,
     estimate_geometry_mfmc,
+    estimate_geometry_fixed_target_mfmc,
     merge_geometry_mfmc_tpmc_results,
     select_geometry_mfmc_optimization_batch,
 )
@@ -21,7 +22,7 @@ from mfmc_campaign.geometry_local_validation import (
     generate_local_refinement_manifest,
     select_dsmc_finalists,
 )
-from mfmc_campaign.geometry_optimization_workflow import initialize_workflow
+from mfmc_campaign.geometry_optimization_workflow import initialize_workflow, refine_iteration
 
 
 def _bundle(geometry_count: int = 3, sample_count: int = 80) -> dict:
@@ -87,6 +88,23 @@ def test_geometry_mfmc_estimates_moments_with_independent_pilot() -> None:
     assert result["total_cost_cpu_hours"] <= 20.0 * result["reference_tpmc_cost_cpu_hours"]
     assert result["budget_contract_satisfied"]
     assert len(result["bootstrap_distributions"]["mean_drag"]) == 80
+
+
+def test_fixed_target_estimator_uses_exactly_twenty_tpmc_runs() -> None:
+    result = estimate_geometry_fixed_target_mfmc(
+        _bundle(geometry_count=1),
+        "cylinder_hex_wp5_000",
+        target_run_count=20,
+        crossfit_folds=5,
+        bootstrap_repeats=40,
+    )
+    assert result["budget_mode"] == "target_run_count"
+    assert result["allocation"]["total_target_count"] == 20
+    assert len(result["production_target_sample_ids"]) == 20
+    assert result["budget_contract_satisfied"]
+    assert result["allocation"]["total_control_count"] > 20
+    assert result["mean_standard_error"] > 0.0
+    assert result["std_standard_error"] > 0.0
 
 
 def test_measured_cost_variation_is_trimmed_to_hard_budget() -> None:
@@ -316,7 +334,17 @@ def test_local_candidates_respect_bounds_and_reserved_validation(tmp_path: Path)
 
 def test_dsmc_finalists_and_paired_report_do_not_update_optimization(tmp_path: Path) -> None:
     design, details = _design_and_details(tmp_path)
-    finalists = select_dsmc_finalists(design, details, tmp_path / "finalists.json", maximum_finalists=4)
+    finalists = select_dsmc_finalists(
+        design,
+        details,
+        tmp_path / "finalists.json",
+        maximum_finalists=4,
+        baseline_geometry_id="g2",
+    )
+    assert finalists["finalists"][0] == {
+        "geometry_id": "g2",
+        "validation_role": "baseline",
+    }
     evaluations = []
     for finalist in finalists["finalists"]:
         for sample_index, delta in enumerate((-0.02, 0.0, 0.02)):
@@ -355,3 +383,35 @@ def test_workflow_initialize_is_idempotent_without_erasing_state(tmp_path: Path)
     assert first["study_id"] == repeated["study_id"]
     assert repeated["idempotent_reuse"] is True
     assert json.loads(state.read_text())["sentinel"] == "preserved"
+
+
+def test_workflow_accepts_exact_twenty_run_control_node_mode(tmp_path: Path) -> None:
+    lf_config = tmp_path / "lf.json"
+    lf_config.write_text(json.dumps({
+        "sample_ids": [f"crn-{index:04d}" for index in range(24)],
+        "samples": [{"state": index} for index in range(24)],
+    }))
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({
+        "budget_hf_equivalent": 20.0,
+        "budget_mode": "target_run_count",
+        "geometry_parameterization": "symmetric_control_nodes",
+        "mpi_processes": 64,
+        "tpmc_samples_per_geometry": 20,
+        "initial_bundle": None,
+        "lf_config": str(lf_config),
+        "output_root": str(tmp_path / "optimization"),
+        "local_batch_size": 6,
+    }))
+    state = tmp_path / "state.json"
+    result = initialize_workflow(config, state)
+    assert result["control_node_trust_region"]["radius"] == 0.12
+    bootstrap = json.loads(Path(result["config"]["initial_bundle"]).read_text())
+    assert bootstrap["evaluations"] == []
+    assert len(bootstrap["uncertainty_samples"]) == 24
+    refined = refine_iteration(state)
+    assert len(refined["candidates"]) == 6
+    persisted = json.loads(state.read_text())
+    baseline_id = persisted["optimization_baseline_geometry_id"]
+    assert baseline_id == refined["candidates"][0]["geometry_id"]
+    assert all(value == 0.0 for value in refined["candidates"][0]["parameters"].values())

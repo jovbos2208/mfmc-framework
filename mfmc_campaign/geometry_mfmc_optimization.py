@@ -224,6 +224,284 @@ def _bootstrap_moments(
     return means, standard_deviations, target_only_means, target_only_standard_deviations
 
 
+def _cross_fitted_moments(
+    target: np.ndarray,
+    control_paired: np.ndarray,
+    control_reference: np.ndarray,
+    *,
+    folds: int,
+    minimum_abs_control_correlation: float,
+) -> tuple[float, float, float, float, float, float]:
+    """Use every target run while estimating moment weights out of fold."""
+    if len(target) != len(control_paired) or len(target) < 4:
+        raise ValueError("cross-fitted MFMC requires at least four paired target/control samples")
+    if len(control_reference) < 2:
+        raise ValueError("cross-fitted MFMC requires at least two independent control-only samples")
+    folds = min(max(int(folds), 2), len(target) // 2)
+    adjusted_mean = np.empty(len(target), dtype=float)
+    adjusted_second = np.empty(len(target), dtype=float)
+    mean_weights: list[float] = []
+    second_weights: list[float] = []
+    reference_mean = float(np.mean(control_reference))
+    reference_second = float(np.mean(control_reference**2))
+    fold_ids = np.arange(len(target)) % folds
+    for fold in range(folds):
+        held_out = fold_ids == fold
+        training = ~held_out
+        beta_mean = _gated_beta(
+            target[training], control_paired[training], minimum_abs_control_correlation
+        )
+        beta_second = _gated_beta(
+            target[training] ** 2,
+            control_paired[training] ** 2,
+            minimum_abs_control_correlation,
+        )
+        adjusted_mean[held_out] = target[held_out] + beta_mean * (
+            reference_mean - control_paired[held_out]
+        )
+        adjusted_second[held_out] = target[held_out] ** 2 + beta_second * (
+            reference_second - control_paired[held_out] ** 2
+        )
+        mean_weights.append(beta_mean)
+        second_weights.append(beta_second)
+    mean = float(np.mean(adjusted_mean))
+    second = float(np.mean(adjusted_second))
+    variance = second - mean * mean
+    return (
+        mean,
+        second,
+        variance,
+        float(np.sqrt(max(variance, 0.0))),
+        float(np.mean(mean_weights)),
+        float(np.mean(second_weights)),
+    )
+
+
+def _bootstrap_cross_fitted_moments(
+    target: np.ndarray,
+    control_paired: np.ndarray,
+    control_reference: np.ndarray,
+    *,
+    folds: int,
+    repeats: int,
+    seed: int,
+    minimum_abs_control_correlation: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if repeats < 2:
+        raise ValueError("bootstrap_repeats must be at least two")
+    rng = np.random.default_rng(seed)
+    means = np.empty(repeats)
+    standard_deviations = np.empty(repeats)
+    target_only_means = np.empty(repeats)
+    target_only_standard_deviations = np.empty(repeats)
+    for repeat in range(repeats):
+        paired_indices = rng.integers(0, len(target), len(target))
+        reference_indices = rng.integers(0, len(control_reference), len(control_reference))
+        y = target[paired_indices]
+        x = control_paired[paired_indices]
+        reference = control_reference[reference_indices]
+        means[repeat], _second, _variance, standard_deviations[repeat], _bm, _bs = (
+            _cross_fitted_moments(
+                y,
+                x,
+                reference,
+                folds=folds,
+                minimum_abs_control_correlation=minimum_abs_control_correlation,
+            )
+        )
+        target_only_means[repeat] = float(np.mean(y))
+        target_only_standard_deviations[repeat] = float(np.std(y, ddof=1))
+    return means, standard_deviations, target_only_means, target_only_standard_deviations
+
+
+def estimate_geometry_fixed_target_mfmc(
+    bundle: Mapping[str, Any],
+    geometry_id: str,
+    *,
+    target_run_count: int = 20,
+    crossfit_folds: int = 5,
+    bootstrap_repeats: int = 1000,
+    bootstrap_seed: int = 20260822,
+    target_cost_override: float | None = None,
+    control_cost_override: float | None = None,
+    common_sample_order: Sequence[str] | None = None,
+    minimum_abs_control_correlation: float = 0.5,
+) -> Dict[str, Any]:
+    """Estimate TPMC moments with exactly ``target_run_count`` reusable target runs."""
+    if target_run_count < 4:
+        raise ValueError("target_run_count must be at least four")
+    if not 0.0 <= minimum_abs_control_correlation < 1.0:
+        raise ValueError("minimum_abs_control_correlation must be in [0, 1)")
+    target_rows = _lookup(bundle, TARGET_MODEL, geometry_id)
+    control_rows = _lookup(bundle, CONTROL_MODEL, geometry_id)
+    available_common = set(target_rows) & set(control_rows)
+    if common_sample_order is None:
+        common_ids = sorted(available_common)
+    else:
+        common_ids = [str(value) for value in common_sample_order if str(value) in available_common]
+        if len(common_ids) != len(common_sample_order):
+            raise ValueError(f"{geometry_id} is missing samples from the prescribed common order")
+    if len(common_ids) < target_run_count:
+        raise ValueError(
+            f"{geometry_id} has {len(common_ids)} paired samples; exactly {target_run_count} are required"
+        )
+    target_ids = common_ids[:target_run_count]
+    reference_ids = [sample_id for sample_id in sorted(control_rows) if sample_id not in set(target_ids)]
+    if len(reference_ids) < 2:
+        raise ValueError(f"{geometry_id} needs at least two additional Sentman samples")
+    target = np.asarray([float(target_rows[sample_id][QOI]) for sample_id in target_ids])
+    control_paired = np.asarray([float(control_rows[sample_id][QOI]) for sample_id in target_ids])
+    control_reference = np.asarray([float(control_rows[sample_id][QOI]) for sample_id in reference_ids])
+    target_cost = (
+        float(target_cost_override)
+        if target_cost_override is not None
+        else _positive_median_cost(target_rows, TARGET_MODEL)
+    )
+    control_cost = (
+        float(control_cost_override)
+        if control_cost_override is not None
+        else _positive_median_cost(control_rows, CONTROL_MODEL)
+    )
+    mean_corr = _correlation(target, control_paired)
+    second_corr = _correlation(target**2, control_paired**2)
+    mfmc_mean, mfmc_second, raw_variance, mfmc_std, beta_mean, beta_second = (
+        _cross_fitted_moments(
+            target,
+            control_paired,
+            control_reference,
+            folds=crossfit_folds,
+            minimum_abs_control_correlation=minimum_abs_control_correlation,
+        )
+    )
+    bootstrap_mean, bootstrap_std, bootstrap_target_mean, bootstrap_target_std = (
+        _bootstrap_cross_fitted_moments(
+            target,
+            control_paired,
+            control_reference,
+            folds=crossfit_folds,
+            repeats=bootstrap_repeats,
+            seed=bootstrap_seed,
+            minimum_abs_control_correlation=minimum_abs_control_correlation,
+        )
+    )
+    mfmc_mean_se = float(np.std(bootstrap_mean, ddof=1))
+    mfmc_std_se = float(np.std(bootstrap_std, ddof=1))
+    target_mean_se = float(np.std(bootstrap_target_mean, ddof=1))
+    target_std_se = float(np.std(bootstrap_target_std, ddof=1))
+    mean_control_accepted = (
+        abs(mean_corr) >= minimum_abs_control_correlation
+        and beta_mean != 0.0
+        and mfmc_mean_se < target_mean_se
+    )
+    std_control_accepted = (
+        abs(second_corr) >= minimum_abs_control_correlation
+        and beta_second != 0.0
+        and raw_variance >= 0.0
+        and mfmc_std_se < target_std_se
+    )
+    target_only_mean = float(np.mean(target))
+    target_only_std = float(np.std(target, ddof=1))
+    mean = mfmc_mean if mean_control_accepted else target_only_mean
+    standard_deviation = mfmc_std if std_control_accepted else target_only_std
+    selected_bootstrap_mean = bootstrap_mean if mean_control_accepted else bootstrap_target_mean
+    selected_bootstrap_std = bootstrap_std if std_control_accepted else bootstrap_target_std
+    flags: list[str] = []
+    if abs(mean_corr) < minimum_abs_control_correlation:
+        flags.append("weak_mean_control_correlation")
+    if abs(second_corr) < minimum_abs_control_correlation:
+        flags.append("weak_second_moment_control_correlation")
+    if not mean_control_accepted:
+        flags.append("mean_control_rejected_no_bootstrap_gain")
+    if not std_control_accepted:
+        flags.append("std_control_rejected_no_bootstrap_gain")
+    if raw_variance < 0.0:
+        flags.append("negative_raw_variance_clipped")
+    estimator_class = (
+        "sentman_both_moments"
+        if mean_control_accepted and std_control_accepted
+        else "sentman_mean_only"
+        if mean_control_accepted
+        else "sentman_second_moment_only"
+        if std_control_accepted
+        else "tpmc_only"
+    )
+    actual_cost = float(
+        sum(float(target_rows[sample_id]["cost_cpu_hours"]) for sample_id in target_ids)
+        + sum(float(control_rows[sample_id]["cost_cpu_hours"]) for sample_id in target_ids + reference_ids)
+    )
+    allocation = {
+        "mode": "fixed_target_run_count_cross_fitted",
+        "pilot_count": 0,
+        "crossfit_folds": int(min(max(crossfit_folds, 2), target_run_count // 2)),
+        "production_target_count": int(target_run_count),
+        "production_control_count": int(target_run_count + len(reference_ids)),
+        "total_target_count": int(target_run_count),
+        "total_control_count": int(target_run_count + len(reference_ids)),
+        "target_cost_cpu_hours": target_cost,
+        "control_cost_cpu_hours": control_cost,
+        "budget_target_runs": int(target_run_count),
+        "allocated_cost_cpu_hours": actual_cost,
+        "pilot_mean_correlation": mean_corr,
+        "pilot_second_moment_correlation": second_corr,
+        "cost_accounting": "all_twenty_target_runs_plus_all_available_sentman_controls",
+    }
+    fallback_reasons = {
+        "mean": [flag for flag in flags if "mean_control" in flag],
+        "std": [flag for flag in flags if "second_moment_control" in flag or "std_control" in flag],
+    }
+    return {
+        "geometry_id": geometry_id,
+        "target_model": TARGET_MODEL,
+        "control_model": CONTROL_MODEL,
+        "qoi": QOI,
+        "budget_mode": "target_run_count",
+        "budget_hf_equivalent": float(target_run_count),
+        "reference_tpmc_cost_cpu_hours": target_cost,
+        "hard_budget_cpu_hours": float(target_run_count * target_cost),
+        "total_cost_cpu_hours": actual_cost,
+        "budget_contract_satisfied": len(target_ids) == target_run_count,
+        "allocation": allocation,
+        "pilot_sample_ids": [],
+        "production_target_sample_ids": target_ids,
+        "production_control_only_sample_ids": reference_ids,
+        "beta_mean": beta_mean,
+        "beta_second_moment": beta_second,
+        "minimum_abs_control_correlation": float(minimum_abs_control_correlation),
+        "available_pair_mean_correlation_diagnostic": mean_corr,
+        "available_pair_second_moment_correlation_diagnostic": second_corr,
+        "mean_estimator": "mfmc_cross_fitted" if mean_control_accepted else "tpmc_only",
+        "std_estimator": "mfmc_cross_fitted_moments" if std_control_accepted else "tpmc_only",
+        "estimator_class": estimator_class,
+        "fallback_reasons": fallback_reasons,
+        "mean_drag": mean,
+        "second_moment_drag": float(standard_deviation**2 + mean**2),
+        "variance_drag": float(standard_deviation**2),
+        "std_drag": standard_deviation,
+        "raw_mfmc_mean_drag": mfmc_mean,
+        "raw_mfmc_second_moment_drag": mfmc_second,
+        "raw_mfmc_std_drag": mfmc_std,
+        "tpmc_only_mean_drag": target_only_mean,
+        "tpmc_only_std_drag": target_only_std,
+        "mean_standard_error": float(np.std(selected_bootstrap_mean, ddof=1)),
+        "std_standard_error": float(np.std(selected_bootstrap_std, ddof=1)),
+        "mean_ci95": _ci(selected_bootstrap_mean),
+        "std_ci95": _ci(selected_bootstrap_std),
+        "bootstrap_distributions": {
+            "mean_drag": [float(value) for value in selected_bootstrap_mean],
+            "std_drag": [float(value) for value in selected_bootstrap_std],
+        },
+        "bootstrap_pairing": {
+            "seed": int(bootstrap_seed),
+            "pilot_sample_ids": [],
+            "production_target_sample_ids": target_ids,
+        },
+        "bootstrap_repeats": int(bootstrap_repeats),
+        "bootstrap_seed": int(bootstrap_seed),
+        "equal_budget_tpmc_only_count": int(target_run_count),
+        "quality_flags": flags,
+    }
+
+
 def estimate_geometry_mfmc(
     bundle: Mapping[str, Any],
     geometry_id: str,
@@ -609,6 +887,9 @@ def analyze_geometry_mfmc_bundle(
     minimum_abs_control_correlation: float = 0.5,
     confidence_level: float = 0.95,
     improvement_probability_threshold: float = 0.95,
+    target_run_count: int | None = None,
+    crossfit_folds: int = 5,
+    baseline_geometry_id: str | None = None,
 ) -> Dict[str, Any]:
     source = Path(bundle_json).resolve()
     payload = json.loads(source.read_text(encoding="utf-8"))
@@ -624,24 +905,48 @@ def analyze_geometry_mfmc_bundle(
     common_sample_order = _space_filling_sample_order(
         payload["uncertainty_samples"], sorted(common_target_ids)
     )
-    results = [
-        estimate_geometry_mfmc(
-            payload,
-            geometry_id,
-            budget_hf_equivalent=budget_hf_equivalent,
-            pilot_count=pilot_count,
-            bootstrap_repeats=bootstrap_repeats,
-            bootstrap_seed=bootstrap_seed,
-            mean_weight=mean_objective_weight,
-            second_moment_weight=std_objective_weight,
-            target_cost_override=target_cost_override,
-            control_cost_override=control_cost_override,
-            common_sample_order=common_sample_order,
-            minimum_abs_control_correlation=minimum_abs_control_correlation,
+    if target_run_count is None:
+        results = [
+            estimate_geometry_mfmc(
+                payload,
+                geometry_id,
+                budget_hf_equivalent=budget_hf_equivalent,
+                pilot_count=pilot_count,
+                bootstrap_repeats=bootstrap_repeats,
+                bootstrap_seed=bootstrap_seed,
+                mean_weight=mean_objective_weight,
+                second_moment_weight=std_objective_weight,
+                target_cost_override=target_cost_override,
+                control_cost_override=control_cost_override,
+                common_sample_order=common_sample_order,
+                minimum_abs_control_correlation=minimum_abs_control_correlation,
+            )
+            for geometry_id in geometry_ids
+        ]
+    else:
+        results = [
+            estimate_geometry_fixed_target_mfmc(
+                payload,
+                geometry_id,
+                target_run_count=target_run_count,
+                crossfit_folds=crossfit_folds,
+                bootstrap_repeats=bootstrap_repeats,
+                bootstrap_seed=bootstrap_seed,
+                target_cost_override=target_cost_override,
+                control_cost_override=control_cost_override,
+                common_sample_order=common_sample_order,
+                minimum_abs_control_correlation=minimum_abs_control_correlation,
+            )
+            for geometry_id in geometry_ids
+        ]
+    if baseline_geometry_id is not None:
+        baseline = next(
+            (row for row in results if row["geometry_id"] == baseline_geometry_id), None
         )
-        for geometry_id in geometry_ids
-    ]
-    baseline = next((row for row in results if row["geometry_id"].endswith("_000")), results[0])
+        if baseline is None:
+            raise ValueError(f"Configured optimization baseline is unavailable: {baseline_geometry_id}")
+    else:
+        baseline = next((row for row in results if row["geometry_id"].endswith("_000")), results[0])
     pareto = _pareto_ids(results)
     confidence_pareto, comparisons = confidence_aware_pareto_ids(
         results,
@@ -755,6 +1060,9 @@ def analyze_geometry_mfmc_bundle(
         "target_model": TARGET_MODEL,
         "control_model": CONTROL_MODEL,
         "budget_hf_equivalent_per_geometry": float(budget_hf_equivalent),
+        "budget_mode": "target_run_count" if target_run_count is not None else "hf_equivalent_cost",
+        "target_runs_per_geometry": int(target_run_count) if target_run_count is not None else None,
+        "crossfit_folds": int(crossfit_folds) if target_run_count is not None else None,
         "pilot_count_per_geometry": int(pilot_count),
         "minimum_abs_control_correlation": float(minimum_abs_control_correlation),
         "bootstrap_repeats": int(bootstrap_repeats),

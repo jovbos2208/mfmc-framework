@@ -1,7 +1,8 @@
 # Cylinder-hex TPMC--Sentman MFMC optimization
 
-This WP6 workflow does not use a geometry response surrogate. Each evaluated
-geometry receives an equal budget of 20 measured PICLas-TPMC equivalents.
+This WP6 workflow does not use a geometry response surrogate. The legacy mode
+uses a cost budget of 20 measured PICLas-TPMC equivalents; the control-node
+mode uses exactly 20 PICLas-TPMC runs per geometry.
 PICLas TPMC is the optimization target, Sentman is a nested scalar control
 variate, and DSMC is reserved for final validation.
 
@@ -10,6 +11,63 @@ quantity. It estimates the first and second raw moments separately and derives
 the drag standard deviation from them. Five common-random-number pairs form an
 independent pilot; production samples do not overlap the pilot. A nested
 bootstrap propagates pilot-weight, first-moment and second-moment uncertainty.
+
+## Symmetric control-node optimization
+
+The production geometry-optimization mode starts from the cylinder-hex and
+moves ten low-dimensional, symmetry-preserving surface controls: two axial
+ring locations and independent width/height scales on the nose, shoulder,
+tail shoulder, and tail rings. After every move, the transverse coordinates
+are rescaled to restore the prescribed volume. The generated surface must be
+finite, non-degenerate, watertight, outward oriented, inside the envelope and
+ordered in the axial direction. The exact control-node coordinates before and
+after deformation are stored in every geometry manifest.
+
+This mode uses `budget_mode=target_run_count`: exactly 20 paired TPMC/Sentman
+runs are retained for every geometry, while the remaining cheap Sentman states
+estimate the LF expectation. Five-fold cross-fitting estimates the control
+weights out of fold, so all 20 TPMC runs contribute to the final mean and
+second-moment estimates. Mean and standard-deviation controls still have
+independent correlation and bootstrap-improvement gates.
+
+The 20-run constraint is a TPMC budget, not a combined CPU-hour cap. Sentman
+cost is recorded separately and can use the full LF sample pool because it is
+orders of magnitude cheaper.
+
+Create a server configuration from
+`configs/studies/cylinder_hex_control_node_mfmc_optimization.example.json`.
+With `initial_bundle: null`, initialization creates an empty paired bundle from
+the uncertainty samples in `lf_config`; no old geometry result is required.
+The first `refine` batch includes the undeformed cylinder-hex as the statistical
+baseline. A restartable run begins with:
+
+```bash
+STATE=outputs/cylinder_hex/control_node_mfmc_optimization/state.json
+
+python scripts/run_cylinder_hex_mfmc_optimization.py initialize \
+  --config configs/studies/cylinder_hex_control_node_mfmc_optimization.server.json \
+  --state "$STATE"
+python scripts/run_cylinder_hex_mfmc_optimization.py refine --state "$STATE"
+python scripts/run_cylinder_hex_mfmc_optimization.py prepare --state "$STATE"
+
+# Cheap LF branch; omit --execute for preflight only.
+python scripts/run_cylinder_hex_mfmc_optimization.py sentman --state "$STATE" --execute
+
+# PICLas TPMC branch: planning, submission, and collection are separate.
+python scripts/run_cylinder_hex_mfmc_optimization.py submit --state "$STATE"
+python scripts/run_cylinder_hex_mfmc_optimization.py submit --state "$STATE" --execute
+python scripts/run_cylinder_hex_mfmc_optimization.py collect --state "$STATE" --execute
+
+python scripts/run_cylinder_hex_mfmc_optimization.py merge --state "$STATE"
+python scripts/run_cylinder_hex_mfmc_optimization.py analyze --state "$STATE"
+python scripts/run_cylinder_hex_mfmc_optimization.py status --state "$STATE"
+```
+
+If the confidence-aware incumbent improves, the normalized trust radius grows;
+otherwise it contracts. Repeat `refine` through `analyze` until the minimum
+radius or the configured iteration limit produces a stop decision. Common
+random numbers are preserved across geometries. DSMC remains excluded until
+`finalize`.
 
 Sentman is not assumed to be useful. A moment control is activated only when
 the pilot has `abs(correlation) >= 0.5`, and it is retained only when its nested
@@ -58,7 +116,7 @@ python scripts/build_cylinder_hex_round2_suite.py \
   --config-output-dir configs/studies/cylinder_hex_wp6_mfmc_iteration_01 \
   --suite-output outputs/cylinder_hex/wp6_mfmc_optimization/iteration_01/suite.json \
   --n-dsmc 0 \
-  --n-tpmc 19 \
+  --n-tpmc 20 \
   --round-number 4 \
   --mpi-procs 64
 ```

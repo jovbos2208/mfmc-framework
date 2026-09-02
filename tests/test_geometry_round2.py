@@ -10,6 +10,7 @@ import numpy as np
 
 from mfmc_campaign.geometry_design import VARIABLES
 from mfmc_campaign.geometry_round2 import (
+    _stage_generated_geometry,
     build_round2_piclas_suite,
     merge_round2_results,
     select_round2_geometries,
@@ -190,3 +191,31 @@ def test_round2_builder_supports_clean_tpmc_only_suite(tmp_path: Path) -> None:
         assert result["total_tpmc_runs"] == 3
     finally:
         os.chdir(previous)
+
+
+def test_round2_stages_generated_control_node_surface_without_regeneration(
+    tmp_path: Path,
+) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    assets = {}
+    for key, name in (
+        ("adbsat_obj", "surface.obj"),
+        ("adbsat_mat", "surface.mat"),
+        ("meshing_surface_stl", "surface.stl"),
+        ("canonical_surface_npz", "surface.npz"),
+        ("gmsh_exterior_geo", "surface.geo"),
+    ):
+        (source_dir / name).write_bytes(f"unique-{key}".encode())
+        assets[key] = name
+    source_manifest = source_dir / "control.manifest.json"
+    source_manifest.write_text(json.dumps({
+        "parameterization": "symmetric_surface_control_nodes",
+        "assets": assets,
+        "mesh_fingerprint": "node-exact-fingerprint",
+    }))
+    staged = _stage_generated_geometry(source_manifest, tmp_path / "staged")
+    assert staged["mesh_fingerprint"] == "node-exact-fingerprint"
+    assert staged["assets"]["piclas_volume_mesh"] is None
+    for key, name in assets.items():
+        assert (tmp_path / "staged" / name).read_bytes() == f"unique-{key}".encode()

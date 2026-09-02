@@ -19,6 +19,12 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--budget-hf-equivalent", type=float, default=20.0)
     parser.add_argument("--pilot-count", type=int, default=5)
+    parser.add_argument(
+        "--target-run-count",
+        type=int,
+        help="Use a fixed target-run budget (20 for the control-node workflow)",
+    )
+    parser.add_argument("--crossfit-folds", type=int, default=5)
     parser.add_argument("--bootstrap-repeats", type=int, default=1000)
     parser.add_argument("--bootstrap-seed", type=int, default=20260822)
     parser.add_argument("--mean-objective-weight", type=float, default=0.5)
@@ -34,6 +40,8 @@ def main() -> int:
         args.output_dir,
         budget_hf_equivalent=args.budget_hf_equivalent,
         pilot_count=args.pilot_count,
+        target_run_count=args.target_run_count,
+        crossfit_folds=args.crossfit_folds,
         bootstrap_repeats=args.bootstrap_repeats,
         bootstrap_seed=args.bootstrap_seed,
         mean_objective_weight=args.mean_objective_weight,

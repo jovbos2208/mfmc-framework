@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Mapping, Sequence
@@ -174,6 +175,32 @@ def _relative_to_repository(path: Path, repository_root: Path) -> str:
         raise ValueError(f"Round-2 artifact must be inside repository: {path}") from exc
 
 
+def _stage_generated_geometry(source_manifest_path: Path, geometry_dir: Path) -> Dict[str, Any]:
+    """Copy an already generated non-analytical surface without recreating its nodes."""
+    source = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+    geometry_dir.mkdir(parents=True, exist_ok=True)
+    for asset_name in (
+        "adbsat_obj",
+        "adbsat_mat",
+        "meshing_surface_stl",
+        "canonical_surface_npz",
+        "gmsh_exterior_geo",
+    ):
+        relative = source["assets"].get(asset_name)
+        if not relative:
+            raise ValueError(f"Generated geometry is missing required asset {asset_name}")
+        origin = source_manifest_path.parent / str(relative)
+        destination = geometry_dir / origin.name
+        if origin.resolve() != destination.resolve():
+            shutil.copy2(origin, destination)
+        source["assets"][asset_name] = destination.name
+    source["assets"]["piclas_volume_mesh"] = None
+    source["assets"]["piclas_mesh_status"] = "requires independent Gmsh/PyHOPE volume-mesh stage"
+    target = geometry_dir / source_manifest_path.name
+    target.write_text(json.dumps(source, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {**source, "manifest_json": str(target)}
+
+
 def build_round2_piclas_suite(
     selection_json: str | Path,
     design_manifest_json: str | Path,
@@ -220,13 +247,16 @@ def build_round2_piclas_suite(
         source_manifest_path = design_path.parent / design_row["manifest_path"]
         source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
         geometry_dir = mesh_root / geometry_id
-        manifest = build_geometry_assets(
-            geometry_dir,
-            CylinderHexSpec(**source_manifest["specification"]),
-            design_id=geometry_id,
-            uniform_scale_factor=float(source_manifest["provenance"]["uniform_linear_scale_factor"]),
-            **L1_CONTROLS,
-        )
+        if source_manifest.get("parameterization") == "symmetric_surface_control_nodes":
+            manifest = _stage_generated_geometry(source_manifest_path, geometry_dir)
+        else:
+            manifest = build_geometry_assets(
+                geometry_dir,
+                CylinderHexSpec(**source_manifest["specification"]),
+                design_id=geometry_id,
+                uniform_scale_factor=float(source_manifest["provenance"]["uniform_linear_scale_factor"]),
+                **L1_CONTROLS,
+            )
         manifest_path = Path(manifest["manifest_json"])
         mesh_path = geometry_dir / f"{geometry_id}_mesh.h5"
         if mesh_path.is_file():

@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping
 
+from .geometry_control_nodes import generate_control_node_refinement_manifest
+from .geometry_lf_workflow import run_lf_campaign
 from .geometry_local_validation import generate_local_refinement_manifest, select_dsmc_finalists
 from .geometry_mfmc_optimization import (
     analyze_geometry_mfmc_bundle,
@@ -16,6 +18,7 @@ from .geometry_mfmc_optimization import (
     select_geometry_mfmc_optimization_batch,
 )
 from .geometry_round2 import build_round2_piclas_suite
+from .parametric_geometry import CylinderHexSpec
 
 
 def _now() -> str:
@@ -43,6 +46,31 @@ def initialize_workflow(config_json: str | Path, state_path: str | Path) -> Dict
         raise ValueError("Per-geometry budget cannot exceed 20 TPMC equivalents")
     if int(config.get("mpi_processes", 64)) != 64:
         raise ValueError("All optimization PICLas runs must use exactly 64 MPI processes")
+    parameterization = str(config.get("geometry_parameterization", "legacy_four_parameter"))
+    if parameterization not in {"legacy_four_parameter", "symmetric_control_nodes"}:
+        raise ValueError("geometry_parameterization must be legacy_four_parameter or symmetric_control_nodes")
+    if parameterization == "symmetric_control_nodes":
+        if str(config.get("budget_mode", "target_run_count")) != "target_run_count":
+            raise ValueError("symmetric_control_nodes requires budget_mode=target_run_count")
+        if int(config.get("tpmc_samples_per_geometry", 20)) != 20:
+            raise ValueError("symmetric_control_nodes requires exactly 20 TPMC runs per geometry")
+        if not config.get("initial_bundle"):
+            lf_config = json.loads(Path(config["lf_config"]).resolve().read_text(encoding="utf-8"))
+            sample_ids = list(map(str, lf_config["sample_ids"]))
+            samples = list(lf_config["samples"])
+            if len(sample_ids) != len(samples) or len(sample_ids) < 22:
+                raise ValueError("The LF config must contain at least 22 aligned uncertainty samples")
+            bootstrap_path = Path(config["output_root"]).resolve() / "control_node_bootstrap_bundle.json"
+            bootstrap_path.parent.mkdir(parents=True, exist_ok=True)
+            bootstrap_path.write_text(json.dumps({
+                "schema_version": 1,
+                "study_id": str(config.get("study_id", "cylinder_hex_control_node_mfmc")),
+                "selected_geometry_ids": [],
+                "uncertainty_samples": dict(zip(sample_ids, samples)),
+                "geometries": {},
+                "evaluations": [],
+            }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            config["initial_bundle"] = str(bootstrap_path)
     if target.is_file():
         existing = json.loads(target.read_text(encoding="utf-8"))
         if existing.get("config") != config:
@@ -60,6 +88,11 @@ def initialize_workflow(config_json: str | Path, state_path: str | Path) -> Dict
         "optimization_closed": False,
         "stop_decision": {"decision": "continue_optimization", "stop": False},
         "action_log": [],
+        "control_node_trust_region": {
+            "radius": float(config.get("control_node_initial_radius", 0.12)),
+            "minimum_radius": float(config.get("control_node_minimum_radius", 0.015)),
+            "manifests": [],
+        },
     }
     _write_state(target, state)
     return {**state, "state_json": str(target)}
@@ -96,6 +129,13 @@ def analyze_iteration(state_path_value: str | Path) -> Dict[str, Any]:
         minimum_abs_control_correlation=float(config.get("minimum_abs_control_correlation", 0.5)),
         confidence_level=float(config.get("confidence_level", 0.95)),
         improvement_probability_threshold=float(config.get("improvement_probability_threshold", 0.95)),
+        target_run_count=(
+            int(config.get("tpmc_samples_per_geometry", 20))
+            if str(config.get("budget_mode", "hf_equivalent_cost")) == "target_run_count"
+            else None
+        ),
+        crossfit_folds=int(config.get("crossfit_folds", 5)),
+        baseline_geometry_id=state.get("optimization_baseline_geometry_id"),
     )
     iteration["artifacts"].update({
         "analysis_manifest": result["manifest_json"],
@@ -132,7 +172,18 @@ def analyze_iteration(state_path_value: str | Path) -> Dict[str, Any]:
                 float(objective["probability_candidate_improves"])
                 for objective in comparison["objectives"].values()
             )
-    design = json.loads(Path(config["design_manifest"]).resolve().read_text(encoding="utf-8"))
+    control_mode = (
+        str(config.get("geometry_parameterization", "legacy_four_parameter"))
+        == "symmetric_control_nodes"
+    )
+    analysis_design = (
+        iteration["artifacts"].get("design_manifest")
+        if control_mode
+        else config["design_manifest"]
+    )
+    if not analysis_design:
+        raise ValueError("The analyzed iteration has no geometry design manifest")
+    design = json.loads(Path(analysis_design).resolve().read_text(encoding="utf-8"))
     completed_ids = set(detail_by_id)
     eligible_ids = {
         str(row["geometry_id"]) for row in design["designs"]
@@ -151,6 +202,34 @@ def analyze_iteration(state_path_value: str | Path) -> Dict[str, Any]:
         design_space_exhausted=design_space_exhausted,
         budget_exhausted=budget_exhausted,
     )
+    if (
+        control_mode
+        and iteration.get("phase") == "control_node_refinement"
+    ):
+        trust = state["control_node_trust_region"]
+        control_iterations = sum(
+            row.get("phase") == "control_node_refinement" for row in state["iterations"].values()
+        )
+        maximum = int(config.get("maximum_control_node_iterations", 12))
+        radius_met = float(trust["radius"]) <= float(trust["minimum_radius"])
+        maximum_met = control_iterations >= maximum
+        decision = (
+            "control_node_trust_region_converged"
+            if radius_met
+            else "maximum_control_node_iterations"
+            if maximum_met
+            else "continue_optimization"
+        )
+        state["stop_decision"] = {
+            "decision": decision,
+            "stop": decision != "continue_optimization",
+            "criteria": {
+                "minimum_trust_region_radius": radius_met,
+                "maximum_control_node_iterations": maximum_met,
+            },
+            "radius": float(trust["radius"]),
+            "control_node_iterations": int(control_iterations),
+        }
     history_path = Path(config["output_root"]).resolve() / "optimization_history.csv"
     history_rows = [
         {
@@ -214,14 +293,38 @@ def prepare_iteration(state_path_value: str | Path) -> Dict[str, Any]:
         output_root=config.get("geometry_output_root", "piclas/geometry/cylinder_hex_mfmc/L1"),
         config_output_dir=config.get("config_output_root", "configs/studies/cylinder_hex_mfmc"),
         suite_output_json=root / "suite.json", base_config_json=config["base_piclas_config"],
-        n_dsmc=0, n_tpmc=int(config.get("tpmc_samples_per_geometry", 19)),
+        n_dsmc=0, n_tpmc=int(config.get("tpmc_samples_per_geometry", 20)),
         round_number=int(iteration["iteration"]) + 3, mpi_procs=64,
     )
     if result["mpi_procs"] != 64 or result["total_dsmc_runs"] != 0:
         raise AssertionError("Optimization suite violated the 64-MPI TPMC-only contract")
     iteration["artifacts"]["suite_json"] = result["suite_manifest"]
+    lf_config = json.loads(Path(config["lf_config"]).resolve().read_text(encoding="utf-8"))
+    lf_config["design_manifest"] = str(
+        Path(iteration["artifacts"].get("design_manifest", config["design_manifest"])).resolve()
+    )
+    lf_config["study_id"] = f"{state['study_id']}_iteration_{int(iteration['iteration']):03d}_sentman"
+    lf_config_path = root / "sentman_config.json"
+    lf_config_path.write_text(json.dumps(lf_config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    iteration["artifacts"]["sentman_config"] = str(lf_config_path)
     iteration["status"] = "prepared"
     return _record(state_path, state, "prepare", result)
+
+
+def run_iteration_sentman(state_path_value: str | Path, *, execute: bool) -> Dict[str, Any]:
+    """Evaluate the cheap Sentman branch for the current generated batch."""
+    state_path, state = load_state(state_path_value)
+    iteration = _iteration(state)
+    config_path = iteration["artifacts"].get("sentman_config")
+    if not config_path:
+        raise ValueError("Prepare the iteration before running Sentman")
+    output = Path(state["config"]["output_root"]).resolve() / f"iteration_{iteration['iteration']:02d}" / "sentman"
+    result = run_lf_campaign(config_path, output, execute=execute)
+    if execute:
+        iteration["artifacts"]["sentman_results"] = result["results_csv"]
+        iteration["artifacts"]["sentman_metrics"] = result["metrics_csv"]
+        iteration["status"] = "sentman_completed"
+    return _record(state_path, state, "sentman", result)
 
 
 def run_iteration_jobs(state_path_value: str | Path, action: str, *, execute: bool) -> Dict[str, Any]:
@@ -259,8 +362,11 @@ def merge_iteration(state_path_value: str | Path) -> Dict[str, Any]:
     previous = state["iterations"].get(previous_key, {}).get("artifacts", {})
     bundle = previous.get("merged_bundle", config["initial_bundle"])
     output = Path(config["output_root"]).resolve() / f"iteration_{iteration['iteration']:02d}" / "paired_bundle.json"
+    sentman_results = artifacts.get("sentman_results", config.get("sentman_results"))
+    if not sentman_results:
+        raise ValueError("Run the iteration Sentman campaign before merging")
     result = merge_geometry_mfmc_tpmc_results(
-        bundle, artifacts["suite_json"], artifacts["run_root"], config["sentman_results"], output
+        bundle, artifacts["suite_json"], artifacts["run_root"], sentman_results, output
     )
     artifacts["merged_bundle"] = result["output_json"]
     iteration["status"] = "merged"
@@ -270,15 +376,58 @@ def merge_iteration(state_path_value: str | Path) -> Dict[str, Any]:
 def refine_iteration(state_path_value: str | Path) -> Dict[str, Any]:
     state_path, state = load_state(state_path_value)
     iteration = _iteration(state)
-    if not state["stop_decision"].get("stop"):
+    control_mode = (
+        str(state["config"].get("geometry_parameterization", "legacy_four_parameter"))
+        == "symmetric_control_nodes"
+    )
+    if not control_mode and not state["stop_decision"].get("stop"):
         raise ValueError("Local refinement begins only after the discrete stop decision")
     output = Path(state["config"]["output_root"]).resolve() / "local_refinement" / "candidates.json"
-    result = generate_local_refinement_manifest(
-        state["config"]["design_manifest"], iteration["artifacts"]["details_json"], output,
-        count=int(state["config"].get("local_batch_size", 4)),
-        normalized_radius=float(state["config"].get("local_normalized_radius", 0.08)),
-        seed=int(state["config"].get("local_seed", 20260901)),
-    )
+    if control_mode:
+        trust = state["control_node_trust_region"]
+        if iteration.get("phase") == "control_node_refinement":
+            threshold = float(state["config"].get("improvement_probability_threshold", 0.95))
+            if float(iteration.get("best_improvement_probability", 0.0)) >= threshold:
+                trust["radius"] = min(
+                    0.5,
+                    float(trust["radius"]) * float(state["config"].get("trust_region_expand", 1.25)),
+                )
+            else:
+                trust["radius"] = float(trust["radius"]) * float(
+                    state["config"].get("trust_region_contract", 0.5)
+                )
+            trust["radius"] = max(float(trust["minimum_radius"]), float(trust["radius"]))
+        center: Mapping[str, float] | None = None
+        best_id = str(iteration.get("best_geometry_id", ""))
+        for manifest_name in reversed(trust["manifests"]):
+            manifest = json.loads(Path(manifest_name).read_text(encoding="utf-8"))
+            match = next((row for row in manifest["designs"] if row["geometry_id"] == best_id), None)
+            if match is not None:
+                center = match["parameters"]
+                break
+        next_number = int(iteration["iteration"]) + 1
+        output = Path(state["config"]["output_root"]).resolve() / f"control_node_iteration_{next_number:02d}" / "candidates.json"
+        result = generate_control_node_refinement_manifest(
+            output,
+            center_parameters=center,
+            baseline_spec=CylinderHexSpec(**state["config"].get("control_node_baseline_spec", {})),
+            count=int(state["config"].get("local_batch_size", 6)),
+            normalized_radius=float(trust["radius"]),
+            iteration=next_number,
+            uniform_scale_factor=float(state["config"].get("uniform_scale_factor", 0.1)),
+            include_center=not bool(trust["manifests"]),
+        )
+        trust["manifests"].append(result["output_json"])
+        if "optimization_baseline_geometry_id" not in state:
+            state["optimization_baseline_geometry_id"] = str(result["candidates"][0]["geometry_id"])
+        state["stop_decision"] = {"decision": "continue_optimization", "stop": False}
+    else:
+        result = generate_local_refinement_manifest(
+            state["config"]["design_manifest"], iteration["artifacts"]["details_json"], output,
+            count=int(state["config"].get("local_batch_size", 4)),
+            normalized_radius=float(state["config"].get("local_normalized_radius", 0.08)),
+            seed=int(state["config"].get("local_seed", 20260901)),
+        )
     state["local_refinement_manifest"] = result["output_json"]
     selection_path = output.parent / "selection.json"
     selection = {
@@ -288,17 +437,19 @@ def refine_iteration(state_path_value: str | Path) -> Dict[str, Any]:
             {
                 "geometry_id": candidate["geometry_id"],
                 "selection_order": index,
-                "selection_basis": candidate["center_role"],
+                "selection_basis": candidate.get(
+                    "center_role", candidate.get("selection_basis", result["method"])
+                ),
             }
             for index, candidate in enumerate(result["candidates"])
         ],
-        "untouched_validation_geometry_ids": result["validation_geometry_ids_excluded"],
-        "method": "bounded_local_pattern_search_without_geometry_surrogate",
+        "untouched_validation_geometry_ids": result.get("validation_geometry_ids_excluded", []),
+        "method": result["method"],
     }
     selection_path.write_text(json.dumps(selection, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     state["current_iteration"] = int(iteration["iteration"]) + 1
     local_iteration = _iteration(state)
-    local_iteration["phase"] = "local_refinement"
+    local_iteration["phase"] = "control_node_refinement" if control_mode else "local_refinement"
     local_iteration["status"] = "selected"
     local_iteration["artifacts"].update({
         "selection_json": str(selection_path),
@@ -318,16 +469,37 @@ def finalize_workflow(state_path_value: str | Path) -> Dict[str, Any]:
         raise ValueError("DSMC finalization is forbidden before an optimization stop decision")
     iteration = _iteration(state)
     output = Path(state["config"]["output_root"]).resolve() / "final_validation" / "finalists.json"
+    primary_design_value = iteration["artifacts"].get(
+        "design_manifest", state["config"].get("design_manifest")
+    )
+    if not primary_design_value:
+        raise ValueError("The final optimization iteration has no geometry design manifest")
+    primary_design_path = Path(primary_design_value).resolve()
     result = select_dsmc_finalists(
-        state["config"]["design_manifest"], iteration["artifacts"]["details_json"], output,
+        primary_design_path, iteration["artifacts"]["details_json"], output,
         maximum_finalists=int(state["config"].get("maximum_dsmc_finalists", 5)),
+        baseline_geometry_id=state.get("optimization_baseline_geometry_id"),
     )
     validation_root = output.parent
-    original_design_path = Path(state["config"]["design_manifest"]).resolve()
-    manifests = [(original_design_path, json.loads(original_design_path.read_text(encoding="utf-8")))]
+    manifests = [(
+        primary_design_path,
+        json.loads(primary_design_path.read_text(encoding="utf-8")),
+    )]
+    original_design_value = state["config"].get("design_manifest")
+    if original_design_value:
+        original_design_path = Path(original_design_value).resolve()
+        if original_design_path != primary_design_path:
+            manifests.append((
+                original_design_path,
+                json.loads(original_design_path.read_text(encoding="utf-8")),
+            ))
     if state.get("local_refinement_manifest"):
         local_path = Path(state["local_refinement_manifest"]).resolve()
         manifests.append((local_path, json.loads(local_path.read_text(encoding="utf-8"))))
+    for manifest_name in state.get("control_node_trust_region", {}).get("manifests", []):
+        control_path = Path(manifest_name).resolve()
+        if all(control_path != existing[0] for existing in manifests):
+            manifests.append((control_path, json.loads(control_path.read_text(encoding="utf-8"))))
     design_rows: Dict[str, Any] = {}
     for manifest_path, manifest in manifests:
         for row in manifest["designs"]:

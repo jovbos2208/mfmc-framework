@@ -17,6 +17,7 @@ from mfmc_campaign.geometry_optimization_workflow import (
     prepare_iteration,
     refine_iteration,
     run_iteration_jobs,
+    run_iteration_sentman,
     select_iteration,
 )
 
@@ -34,6 +35,9 @@ def main() -> int:
         command = subparsers.add_parser(name)
         command.add_argument("--state", required=True)
         command.add_argument("--execute", action="store_true")
+    sentman = subparsers.add_parser("sentman")
+    sentman.add_argument("--state", required=True)
+    sentman.add_argument("--execute", action="store_true")
     args = parser.parse_args()
     if args.command == "initialize":
         result = initialize_workflow(args.config, args.state)
@@ -45,6 +49,8 @@ def main() -> int:
         result = prepare_iteration(args.state)
     elif args.command in {"submit", "collect"}:
         result = run_iteration_jobs(args.state, args.command, execute=args.execute)
+    elif args.command == "sentman":
+        result = run_iteration_sentman(args.state, execute=args.execute)
     elif args.command == "merge":
         result = merge_iteration(args.state)
     elif args.command == "refine":

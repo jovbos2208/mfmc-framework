@@ -178,6 +178,37 @@ def _fingerprint(points: np.ndarray, triangles: np.ndarray) -> str:
     return digest.hexdigest()
 
 
+def surface_mesh_from_points(points: np.ndarray, triangles: np.ndarray) -> SurfaceMesh:
+    """Build a surface representation from an existing connectivity graph."""
+    point_array = np.asarray(points, dtype=float)
+    triangle_array = np.asarray(triangles, dtype=np.int64)
+    if point_array.ndim != 2 or point_array.shape[1] != 3:
+        raise ParametricGeometryError("surface points must have shape (n, 3)")
+    if triangle_array.ndim != 2 or triangle_array.shape[1] != 3:
+        raise ParametricGeometryError("surface triangles must have shape (m, 3)")
+    if len(point_array) < 4 or len(triangle_array) < 4:
+        raise ParametricGeometryError("surface mesh is too small to enclose a volume")
+    if np.min(triangle_array) < 0 or np.max(triangle_array) >= len(point_array):
+        raise ParametricGeometryError("surface triangle connectivity is out of bounds")
+    oriented = _orient_outward(point_array, triangle_array)
+    area, normal, center = _triangle_geometry(point_array, oriented)
+    return SurfaceMesh(
+        points=point_array,
+        triangles=oriented,
+        triangle_area=area,
+        triangle_normal=normal,
+        triangle_center=center,
+        mesh_fingerprint=_fingerprint(point_array, oriented),
+    )
+
+
+def projected_reference_area(mesh: SurfaceMesh, axis: int = 0) -> float:
+    """Return the two-sided projected area normal to one Cartesian axis."""
+    if axis not in (0, 1, 2):
+        raise ParametricGeometryError("projected-area axis must be 0, 1, or 2")
+    return float(0.5 * np.sum(mesh.triangle_area * np.abs(mesh.triangle_normal[:, axis])))
+
+
 def _orient_outward(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     oriented = np.array(triangles, copy=True)
     center = np.mean(points, axis=0)

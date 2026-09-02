@@ -169,13 +169,18 @@ def select_dsmc_finalists(
     output_json: str | Path,
     *,
     maximum_finalists: int = 5,
+    baseline_geometry_id: str | None = None,
 ) -> Dict[str, Any]:
     if not 3 <= maximum_finalists <= 5:
         raise ValueError("maximum_finalists must be between three and five")
     design = _read_json(design_manifest_json)
     rows = list(_read_json(mfmc_details_json)["geometries"])
     by_id = {str(row["geometry_id"]): row for row in rows}
-    baseline_id = str(design["baseline_geometry_id"])
+    baseline_id = str(
+        baseline_geometry_id
+        if baseline_geometry_id is not None
+        else design["baseline_geometry_id"]
+    )
     if baseline_id not in by_id:
         raise ValueError("Baseline must have a completed optimization estimate before finalization")
     objectives = np.asarray([[float(row["mean_drag"]), float(row["std_drag"])] for row in rows])
