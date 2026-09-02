@@ -22,7 +22,11 @@ from mfmc_campaign.geometry_local_validation import (
     generate_local_refinement_manifest,
     select_dsmc_finalists,
 )
-from mfmc_campaign.geometry_optimization_workflow import initialize_workflow, refine_iteration
+from mfmc_campaign.geometry_optimization_workflow import (
+    initialize_workflow,
+    prepare_iteration,
+    refine_iteration,
+)
 
 
 def _bundle(geometry_count: int = 3, sample_count: int = 80) -> dict:
@@ -400,6 +404,7 @@ def test_workflow_accepts_exact_twenty_run_control_node_mode(tmp_path: Path) -> 
         "tpmc_samples_per_geometry": 20,
         "initial_bundle": None,
         "lf_config": str(lf_config),
+        "base_piclas_config": str(tmp_path / "base_piclas.json"),
         "output_root": str(tmp_path / "optimization"),
         "local_batch_size": 6,
     }))
@@ -415,3 +420,16 @@ def test_workflow_accepts_exact_twenty_run_control_node_mode(tmp_path: Path) -> 
     baseline_id = persisted["optimization_baseline_geometry_id"]
     assert baseline_id == refined["candidates"][0]["geometry_id"]
     assert all(value == 0.0 for value in refined["candidates"][0]["parameters"].values())
+    with patch(
+        "mfmc_campaign.geometry_optimization_workflow.build_round2_piclas_suite",
+        return_value={
+            "mpi_procs": 64,
+            "total_dsmc_runs": 0,
+            "suite_manifest": str(tmp_path / "suite.json"),
+        },
+    ):
+        prepare_iteration(state)
+    prepared = json.loads(state.read_text())
+    sentman_config = Path(prepared["iterations"]["01"]["artifacts"]["sentman_config"])
+    sentman = json.loads(sentman_config.read_text())
+    assert sentman["design_manifest"] == refined["output_json"]

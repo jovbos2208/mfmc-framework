@@ -287,9 +287,15 @@ def prepare_iteration(state_path_value: str | Path) -> Dict[str, Any]:
     selection = iteration["artifacts"].get("selection_json")
     if not selection:
         raise ValueError("Select a batch before preparing it")
+    design_manifest = iteration["artifacts"].get("design_manifest") or config.get(
+        "design_manifest"
+    )
+    if not design_manifest:
+        raise ValueError("The selected iteration has no geometry design manifest")
     root = Path(config["output_root"]).resolve() / f"iteration_{iteration['iteration']:02d}"
+    root.mkdir(parents=True, exist_ok=True)
     result = build_round2_piclas_suite(
-        selection, iteration["artifacts"].get("design_manifest", config["design_manifest"]), config["lf_config"],
+        selection, design_manifest, config["lf_config"],
         output_root=config.get("geometry_output_root", "piclas/geometry/cylinder_hex_mfmc/L1"),
         config_output_dir=config.get("config_output_root", "configs/studies/cylinder_hex_mfmc"),
         suite_output_json=root / "suite.json", base_config_json=config["base_piclas_config"],
@@ -300,9 +306,7 @@ def prepare_iteration(state_path_value: str | Path) -> Dict[str, Any]:
         raise AssertionError("Optimization suite violated the 64-MPI TPMC-only contract")
     iteration["artifacts"]["suite_json"] = result["suite_manifest"]
     lf_config = json.loads(Path(config["lf_config"]).resolve().read_text(encoding="utf-8"))
-    lf_config["design_manifest"] = str(
-        Path(iteration["artifacts"].get("design_manifest", config["design_manifest"])).resolve()
-    )
+    lf_config["design_manifest"] = str(Path(design_manifest).resolve())
     lf_config["study_id"] = f"{state['study_id']}_iteration_{int(iteration['iteration']):03d}_sentman"
     lf_config_path = root / "sentman_config.json"
     lf_config_path.write_text(json.dumps(lf_config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
