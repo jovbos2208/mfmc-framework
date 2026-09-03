@@ -36,7 +36,7 @@
   "maximum_dsmc_finalists": 5,
   "mean_objective_weight": 0.5,
   "minimum_abs_control_correlation": 0.5,
-  "mpi_processes": 64,
+  "mpi_processes": 36,
   "output_root": "outputs/cylinder_hex/control_node_mfmc_optimization",
   "python_executable": "python3",
   "std_objective_weight": 0.5,

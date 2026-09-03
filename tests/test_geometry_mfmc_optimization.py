@@ -364,20 +364,20 @@ def test_dsmc_finalists_and_paired_report_do_not_update_optimization(tmp_path: P
     assert Path(report["report_json"]).is_file() and Path(report["report_csv"]).is_file()
 
 
-def test_workflow_rejects_non_64_mpi_configuration(tmp_path: Path) -> None:
+def test_workflow_rejects_non_36_mpi_configuration(tmp_path: Path) -> None:
     config = tmp_path / "config.json"
     config.write_text(json.dumps({"budget_hf_equivalent": 20.0, "mpi_processes": 32}))
     try:
         initialize_workflow(config, tmp_path / "state.json")
     except ValueError as exc:
-        assert "64 MPI" in str(exc)
+        assert "36 MPI" in str(exc)
     else:
-        raise AssertionError("non-64 MPI workflow configuration was accepted")
+        raise AssertionError("non-36 MPI workflow configuration was accepted")
 
 
 def test_workflow_initialize_is_idempotent_without_erasing_state(tmp_path: Path) -> None:
     config = tmp_path / "config.json"
-    config.write_text(json.dumps({"budget_hf_equivalent": 20.0, "mpi_processes": 64}))
+    config.write_text(json.dumps({"budget_hf_equivalent": 20.0, "mpi_processes": 36}))
     state = tmp_path / "state.json"
     first = initialize_workflow(config, state)
     payload = json.loads(state.read_text())
@@ -400,7 +400,7 @@ def test_workflow_accepts_exact_twenty_run_control_node_mode(tmp_path: Path) -> 
         "budget_hf_equivalent": 20.0,
         "budget_mode": "target_run_count",
         "geometry_parameterization": "symmetric_control_nodes",
-        "mpi_processes": 64,
+        "mpi_processes": 36,
         "tpmc_samples_per_geometry": 20,
         "initial_bundle": None,
         "lf_config": str(lf_config),
@@ -423,12 +423,15 @@ def test_workflow_accepts_exact_twenty_run_control_node_mode(tmp_path: Path) -> 
     with patch(
         "mfmc_campaign.geometry_optimization_workflow.build_round2_piclas_suite",
         return_value={
-            "mpi_procs": 64,
+            "mpi_procs": 36,
+            "simulator_module": "PICLas_prandtl",
             "total_dsmc_runs": 0,
             "suite_manifest": str(tmp_path / "suite.json"),
         },
-    ):
+    ) as build_mock:
         prepare_iteration(state)
+    assert build_mock.call_args.kwargs["mpi_procs"] == 36
+    assert build_mock.call_args.kwargs["simulator_module"] == "PICLas_prandtl"
     prepared = json.loads(state.read_text())
     sentman_config = Path(prepared["iterations"]["01"]["artifacts"]["sentman_config"])
     sentman = json.loads(sentman_config.read_text())

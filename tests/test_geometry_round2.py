@@ -182,13 +182,21 @@ def test_round2_builder_supports_clean_tpmc_only_suite(tmp_path: Path) -> None:
                 n_dsmc=0,
                 n_tpmc=3,
                 round_number=4,
-                mpi_procs=64,
+                mpi_procs=36,
+                simulator_module="PICLas_prandtl",
             )
         row = result["geometries"][0]
         assert "tpmc_workflow_config" in row
         assert "dsmc_workflow_config" not in row
         assert result["total_dsmc_runs"] == 0
         assert result["total_tpmc_runs"] == 3
+        assert result["mpi_procs"] == 36
+        assert result["simulator_module"] == "PICLas_prandtl"
+        tpmc_config = json.loads(
+            (tmp_path / "configs" / f"{geometry_id}_tpmc.json").read_text()
+        )
+        assert tpmc_config["adapter"]["kwargs"]["mpi_procs"] == 36
+        assert tpmc_config["adapter"]["kwargs"]["simulator_module"] == "PICLas_prandtl"
     finally:
         os.chdir(previous)
 

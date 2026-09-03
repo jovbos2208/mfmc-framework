@@ -216,11 +216,14 @@ def build_round2_piclas_suite(
     pyhope_executable: str = "pyhope",
     round_number: int = 2,
     mpi_procs: int = 64,
+    simulator_module: str | None = None,
 ) -> Dict[str, Any]:
     if round_number < 2:
         raise ValueError("Sequential geometry acquisition starts at round 2")
     if mpi_procs < 1:
         raise ValueError("mpi_procs must be positive")
+    if simulator_module is not None and not simulator_module.strip():
+        raise ValueError("simulator_module must be non-empty when provided")
     if n_dsmc < 0 or n_tpmc < 1 or n_tpmc < n_dsmc:
         raise ValueError("Sequential acquisition requires 0 <= n_dsmc <= n_tpmc and n_tpmc >= 1")
     selection = json.loads(Path(selection_json).resolve().read_text(encoding="utf-8"))
@@ -290,6 +293,8 @@ def build_round2_piclas_suite(
         )
         study_id = f"vleo_cylinder_hex_wp5_round{round_number}_{mpi_procs}proc"
         common["adapter"]["kwargs"]["mpi_procs"] = int(mpi_procs)
+        if simulator_module is not None:
+            common["adapter"]["kwargs"]["simulator_module"] = simulator_module
         common["request"]["study_id"] = study_id
         tpmc = deepcopy(common)
         tpmc["adapter"]["model_id"] = "PICLas_TPMC"
@@ -342,6 +347,11 @@ def build_round2_piclas_suite(
         "study_id": f"vleo_cylinder_hex_wp5_round{round_number}_{mpi_procs}proc",
         "round": int(round_number),
         "mpi_procs": int(mpi_procs),
+        "simulator_module": str(
+            simulator_module
+            if simulator_module is not None
+            else base.get("adapter", {}).get("kwargs", {}).get("simulator_module", "PICLas")
+        ),
         "mesh_level": "L1",
         "n_dsmc_per_geometry": n_dsmc,
         "n_tpmc_per_geometry": n_tpmc,

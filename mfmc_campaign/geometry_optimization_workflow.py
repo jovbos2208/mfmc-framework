@@ -21,6 +21,10 @@ from .geometry_round2 import build_round2_piclas_suite
 from .parametric_geometry import CylinderHexSpec
 
 
+PRANDTL_MPI_PROCESSES = 36
+PRANDTL_PICLAS_MODULE = "PICLas_prandtl"
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -44,8 +48,10 @@ def initialize_workflow(config_json: str | Path, state_path: str | Path) -> Dict
     config = json.loads(config_path.read_text(encoding="utf-8"))
     if float(config.get("budget_hf_equivalent", 20.0)) > 20.0:
         raise ValueError("Per-geometry budget cannot exceed 20 TPMC equivalents")
-    if int(config.get("mpi_processes", 64)) != 64:
-        raise ValueError("All optimization PICLas runs must use exactly 64 MPI processes")
+    if int(config.get("mpi_processes", PRANDTL_MPI_PROCESSES)) != PRANDTL_MPI_PROCESSES:
+        raise ValueError(
+            f"All optimization PICLas runs must use exactly {PRANDTL_MPI_PROCESSES} MPI processes"
+        )
     parameterization = str(config.get("geometry_parameterization", "legacy_four_parameter"))
     if parameterization not in {"legacy_four_parameter", "symmetric_control_nodes"}:
         raise ValueError("geometry_parameterization must be legacy_four_parameter or symmetric_control_nodes")
@@ -300,10 +306,16 @@ def prepare_iteration(state_path_value: str | Path) -> Dict[str, Any]:
         config_output_dir=config.get("config_output_root", "configs/studies/cylinder_hex_mfmc"),
         suite_output_json=root / "suite.json", base_config_json=config["base_piclas_config"],
         n_dsmc=0, n_tpmc=int(config.get("tpmc_samples_per_geometry", 20)),
-        round_number=int(iteration["iteration"]) + 3, mpi_procs=64,
+        round_number=int(iteration["iteration"]) + 3,
+        mpi_procs=PRANDTL_MPI_PROCESSES,
+        simulator_module=PRANDTL_PICLAS_MODULE,
     )
-    if result["mpi_procs"] != 64 or result["total_dsmc_runs"] != 0:
-        raise AssertionError("Optimization suite violated the 64-MPI TPMC-only contract")
+    if (
+        result["mpi_procs"] != PRANDTL_MPI_PROCESSES
+        or result["simulator_module"] != PRANDTL_PICLAS_MODULE
+        or result["total_dsmc_runs"] != 0
+    ):
+        raise AssertionError("Optimization suite violated the Prandtl 36-MPI TPMC-only contract")
     iteration["artifacts"]["suite_json"] = result["suite_manifest"]
     lf_config = json.loads(Path(config["lf_config"]).resolve().read_text(encoding="utf-8"))
     lf_config["design_manifest"] = str(Path(design_manifest).resolve())
@@ -542,10 +554,18 @@ def finalize_workflow(state_path_value: str | Path) -> Dict[str, Any]:
         config_output_dir=state["config"].get("final_config_output_root", "configs/studies/cylinder_hex_final_validation"),
         suite_output_json=validation_root / "suite.json",
         base_config_json=state["config"]["base_piclas_config"],
-        n_dsmc=sample_count, n_tpmc=sample_count, round_number=999, mpi_procs=64,
+        n_dsmc=sample_count,
+        n_tpmc=sample_count,
+        round_number=999,
+        mpi_procs=PRANDTL_MPI_PROCESSES,
+        simulator_module=PRANDTL_PICLAS_MODULE,
     )
-    if suite["mpi_procs"] != 64 or suite["total_dsmc_runs"] == 0:
-        raise AssertionError("Final validation suite must contain 64-MPI DSMC workflows")
+    if (
+        suite["mpi_procs"] != PRANDTL_MPI_PROCESSES
+        or suite["simulator_module"] != PRANDTL_PICLAS_MODULE
+        or suite["total_dsmc_runs"] == 0
+    ):
+        raise AssertionError("Final validation suite must contain Prandtl 36-MPI DSMC workflows")
     state["optimization_closed"] = True
     state["finalists_json"] = result["output_json"]
     state["final_validation_suite"] = suite["suite_manifest"]

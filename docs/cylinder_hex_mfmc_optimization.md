@@ -5,6 +5,8 @@ uses a cost budget of 20 measured PICLas-TPMC equivalents; the control-node
 mode uses exactly 20 PICLas-TPMC runs per geometry.
 PICLas TPMC is the optimization target, Sentman is a nested scalar control
 variate, and DSMC is reserved for final validation.
+All generated optimization and final-validation PICLas workflows use the
+Prandtl runtime module `PICLas_prandtl` with exactly 36 MPI processes.
 
 The estimator treats `drag_area_m2 = C_D * A_ref` as the geometry-invariant
 quantity. It estimates the first and second raw moments separately and derives
@@ -223,9 +225,10 @@ python scripts/run_cylinder_hex_mfmc_optimization.py analyze --state "$STATE"
 ```
 
 `prepare` always calls the existing Round-2 suite builder with `n_dsmc=0` and
-`mpi_procs=64`. `submit` and `collect` delegate to the existing Round-2 runner;
-there is no second submission implementation. Inputs, paths, seeds, sample
-counts and thresholds remain in the config embedded in the state manifest.
+`mpi_procs=36`, and forces the `PICLas_prandtl` simulator module. `submit` and
+`collect` delegate to the existing Round-2 runner; there is no second
+submission implementation. Inputs, paths, seeds, sample counts and thresholds
+remain in the config embedded in the state manifest.
 
 Stop decisions are one of `budget_exhausted`, `design_space_exhausted`,
 `no_significant_improvement`, `pareto_set_stable`,
@@ -248,13 +251,15 @@ invalid surfaces are rejected, generated surfaces are validated, and the
 normalised/physical parameters plus reusable geometry manifests are persisted.
 The subsequent `prepare` step performs the normal Gmsh/HDF5 build and HDF5 mesh
 validation through the existing suite builder. The local batch has the same
-20-HF, TPMC/Sentman and 64-MPI contract and contains no DSMC configuration.
+20-HF, TPMC/Sentman and Prandtl 36-MPI contract and contains no DSMC
+configuration.
 
 ## Final DSMC validation
 
 `finalize` is rejected unless the state contains a stop decision. It closes the
 optimization, selects baseline/minimum-mean/robust/Pareto-knee and optionally a
-Pareto edge, and creates a 64-MPI suite with identical TPMC/DSMC CRN states:
+Pareto edge, and creates a Prandtl 36-MPI suite with identical TPMC/DSMC CRN
+states:
 
 ```bash
 python scripts/run_cylinder_hex_mfmc_optimization.py finalize --state "$STATE"
