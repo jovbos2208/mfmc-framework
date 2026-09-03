@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ from mfmc_campaign.geometry_round2 import (
     select_round2_geometries,
 )
 from mfmc_campaign.sparse_pce import SparsePCEModel
+from scripts import run_cylinder_hex_round2_suite
 
 
 def _linear_model(path: Path, *, coefficient: float, mean: float) -> None:
@@ -36,6 +38,55 @@ def _linear_model(path: Path, *, coefficient: float, mean: float) -> None:
         max_interaction=1,
     )
     model.write_json(str(path))
+
+
+def test_round2_runner_keeps_operational_logs_out_of_json_stdout(
+    tmp_path: Path, capsys,
+) -> None:
+    config = tmp_path / "workflow.json"
+    config.write_text("{}")
+    suite = tmp_path / "suite.json"
+    suite.write_text(json.dumps({
+        "geometries": [{
+            "geometry_id": "geometry-0",
+            "tpmc_workflow_config": config.name,
+        }],
+    }))
+
+    def noisy_submit(_config, *, state_path):
+        print("Job 123 submitted")
+        return {"status": "submitted", "state_path": str(state_path)}
+
+    previous = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "run_cylinder_hex_round2_suite.py",
+                "submit",
+                "--suite",
+                str(suite),
+                "--run-root",
+                str(tmp_path / "runs"),
+                "--fidelity",
+                "tpmc",
+                "--execute",
+            ],
+        ), patch.object(
+            run_cylinder_hex_round2_suite,
+            "submit_workflow",
+            side_effect=noisy_submit,
+        ):
+            assert run_cylinder_hex_round2_suite.main() == 0
+    finally:
+        os.chdir(previous)
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["workflows"][0]["status"] == "submitted"
+    assert "Job 123 submitted" in captured.err
 
 
 def test_round2_selection_excludes_existing_and_validation_geometries(tmp_path: Path) -> None:

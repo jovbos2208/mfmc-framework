@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -46,9 +47,17 @@ def main() -> int:
                     if state.get("status") in {"submitted", "collected"}:
                         summaries.append({"geometry_id": geometry_id, "model_id": model_id, "status": state["status"], "skipped": True})
                         continue
-                output = submit_workflow(config, state_path=state_path) if args.execute else plan_workflow(config, state_path=state_path)
+                with redirect_stdout(sys.stderr):
+                    output = (
+                        submit_workflow(config, state_path=state_path)
+                        if args.execute
+                        else plan_workflow(config, state_path=state_path)
+                    )
             else:
-                output = collect_workflow(config, state_path=state_path, results_path=results_path)
+                with redirect_stdout(sys.stderr):
+                    output = collect_workflow(
+                        config, state_path=state_path, results_path=results_path
+                    )
             summaries.append({"geometry_id": geometry_id, "model_id": model_id, **output})
     print(json.dumps({"action": args.action, "execute": args.execute, "workflows": summaries}, indent=2, sort_keys=True))
     return 0
