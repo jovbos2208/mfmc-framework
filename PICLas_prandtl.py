@@ -34,7 +34,9 @@ def _canonical_geometry_key(value) -> str:
     return str(value).strip().upper()
 
 
-def _boundary3_source_name(geometry_id=None, geometry_mesh=None) -> str:
+def _boundary3_source_name(geometry_id=None, geometry_mesh=None, object_boundary_name=None) -> str:
+    if object_boundary_name is not None and str(object_boundary_name).strip():
+        return str(object_boundary_name).strip().upper()
     if _canonical_geometry_key(geometry_id) == "CUBE":
         return "CUBE"
     if geometry_mesh:
@@ -492,6 +494,7 @@ class PiclasSimulator:
         env_model=None,
         geometry_id=None,
         geometry_mesh=None,
+        object_boundary_name=None,
     ):
         subdir_name = self._make_job_subdir_name(db_index=db_index, aos=AoS, geometry_id=geometry_id)
         job_subdir = os.path.join(self.piclas_dir, subdir_name)
@@ -515,7 +518,11 @@ class PiclasSimulator:
         shutil.copy(os.path.join(self.update_dir, self.ini_high), job_ini_path)
         mesh_filename = self._resolve_mesh_filename(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
         project_name = self._resolve_project_name(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
-        source_name = _boundary3_source_name(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
+        source_name = _boundary3_source_name(
+            geometry_id=geometry_id,
+            geometry_mesh=geometry_mesh,
+            object_boundary_name=object_boundary_name,
+        )
         _rewrite_job_ini_geometry(job_ini_path, mesh_file=mesh_filename, project_name=project_name, source_name=source_name)
         _patch_piclas_collision_mode(
             job_ini_path,
@@ -1020,6 +1027,7 @@ class PiclasSimulator:
         geometry_id=None,
         geometry_mesh=None,
         flow_zero_direction=None,
+        object_boundary_name=None,
     ):
         job_ids = []
         job_subdirs = []
@@ -1041,6 +1049,7 @@ class PiclasSimulator:
                 env_model=env_model,
                 geometry_id=geometry_id,
                 geometry_mesh=geometry_mesh,
+                object_boundary_name=object_boundary_name,
             )
             job_subdirs.append(job_subdir)
             group_subdirs.append(job_subdir)
