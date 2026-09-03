@@ -29,6 +29,39 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _decode_successful_subprocess_output(stdout: str, *, action: str, execute: bool) -> Dict[str, Any]:
+    text = stdout.strip()
+    if not text:
+        return {
+            "action": action,
+            "execute": execute,
+            "status": "completed_without_json_summary",
+            "warning": "successful subprocess returned empty stdout",
+        }
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Older simulator modules may write operational messages before the
+        # final JSON document. Recover that document after a successful
+        # subprocess; the jobs have already been queued at this point.
+        decoder = json.JSONDecoder()
+        for offset, character in enumerate(text):
+            if character != "{":
+                continue
+            try:
+                candidate, end = decoder.raw_decode(text, offset)
+            except json.JSONDecodeError:
+                continue
+            if not text[end:].strip():
+                return candidate
+        return {
+            "action": action,
+            "execute": execute,
+            "status": "completed_without_json_summary",
+            "stdout_tail": text[-4000:],
+        }
+
+
 def _write_state(path: Path, state: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -371,7 +404,9 @@ def run_iteration_jobs(state_path_value: str | Path, action: str, *, execute: bo
             f"Cylinder-hex {action} subprocess failed with exit code "
             f"{completed.returncode}:\n{diagnostic}"
         )
-    result = json.loads(completed.stdout)
+    result = _decode_successful_subprocess_output(
+        completed.stdout, action=action, execute=execute
+    )
     iteration["artifacts"]["run_root"] = str(run_root)
     iteration["status"] = "submitted" if action == "submit" and execute else "planned" if action == "submit" else "collected"
     return _record(state_path, state, action, result)

@@ -23,10 +23,23 @@ from mfmc_campaign.geometry_local_validation import (
     select_dsmc_finalists,
 )
 from mfmc_campaign.geometry_optimization_workflow import (
+    _decode_successful_subprocess_output,
     initialize_workflow,
     prepare_iteration,
     refine_iteration,
 )
+
+
+def test_successful_submit_output_accepts_logs_or_empty_stdout() -> None:
+    payload = {"action": "submit", "workflows": [{"status": "submitted"}]}
+    noisy = "Job 123 submitted\n" + json.dumps(payload, indent=2)
+    assert _decode_successful_subprocess_output(
+        noisy, action="submit", execute=True
+    ) == payload
+
+    empty = _decode_successful_subprocess_output("", action="submit", execute=True)
+    assert empty["status"] == "completed_without_json_summary"
+    assert empty["execute"] is True
 
 
 def _bundle(geometry_count: int = 3, sample_count: int = 80) -> dict:
