@@ -46,6 +46,24 @@ def _boundary3_source_name(geometry_id=None, geometry_mesh=None, object_boundary
     return "OBJ"
 
 
+def _hdf5_boundary_names(mesh_path: str) -> list[str]:
+    """Read boundary names exactly as PICLas will see them in the mesh."""
+    try:
+        with open(mesh_path, "rb") as stream:
+            if stream.read(8) != b"\x89HDF\r\n\x1a\n":
+                return []
+        import h5py
+
+        with h5py.File(mesh_path, "r") as mesh_file:
+            values = mesh_file["BCNames"][...].reshape(-1)
+            return [
+                bytes(value).decode("utf-8", errors="strict").rstrip("\x00").strip()
+                for value in values
+            ]
+    except Exception:
+        return []
+
+
 def _project_name_from_geometry(geometry_id=None, geometry_mesh=None) -> str:
     for candidate in (geometry_id, geometry_mesh):
         if candidate is None:
@@ -74,9 +92,32 @@ def _mesh_filename_from_geometry(geometry_id=None, geometry_mesh=None, geometry_
     return os.path.basename(str(mesh_name))
 
 
-def _rewrite_job_ini_geometry(ini_path: str, mesh_file: str, project_name: str, source_name: str) -> None:
+def _rewrite_job_ini_geometry(
+    ini_path: str,
+    mesh_file: str,
+    project_name: str,
+    source_name: str,
+    mesh_boundary_names=None,
+) -> None:
     with open(ini_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
+
+    boundary_lookup = {
+        str(name).strip().upper(): str(name).strip()
+        for name in (mesh_boundary_names or [])
+        if str(name).strip()
+    }
+    requested_boundaries = {1: "IN", 2: "OUT", 3: source_name}
+    if boundary_lookup:
+        missing = [
+            name for name in requested_boundaries.values()
+            if name.upper() not in boundary_lookup
+        ]
+        if missing:
+            raise ValueError(
+                "PICLas particle boundaries are absent from the HDF5 mesh: "
+                f"requested={missing}, available={list(boundary_lookup.values())}"
+            )
 
     updated = []
     for line in lines:
@@ -84,8 +125,17 @@ def _rewrite_job_ini_geometry(ini_path: str, mesh_file: str, project_name: str, 
             updated.append(f"MeshFile = {mesh_file}  ! (relative) path to meshfile\n")
         elif line.lstrip().startswith("ProjectName"):
             updated.append(f"ProjectName     = {project_name}    ! Name of the current simulation\n")
-        elif line.lstrip().startswith("Part-Boundary3-SourceName"):
-            updated.append(f"Part-Boundary3-SourceName  = {source_name}\n")
+        elif any(
+            line.lstrip().startswith(f"Part-Boundary{index}-SourceName")
+            for index in requested_boundaries
+        ):
+            index = next(
+                index for index in requested_boundaries
+                if line.lstrip().startswith(f"Part-Boundary{index}-SourceName")
+            )
+            requested = requested_boundaries[index]
+            actual = boundary_lookup.get(requested.upper(), requested)
+            updated.append(f"Part-Boundary{index}-SourceName  = {actual}\n")
         else:
             updated.append(line)
 
@@ -518,12 +568,20 @@ class PiclasSimulator:
         shutil.copy(os.path.join(self.update_dir, self.ini_high), job_ini_path)
         mesh_filename = self._resolve_mesh_filename(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
         project_name = self._resolve_project_name(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
+        mesh_src = self._resolve_mesh_source(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
+        mesh_boundary_names = _hdf5_boundary_names(mesh_src)
         source_name = _boundary3_source_name(
             geometry_id=geometry_id,
             geometry_mesh=geometry_mesh,
             object_boundary_name=object_boundary_name,
         )
-        _rewrite_job_ini_geometry(job_ini_path, mesh_file=mesh_filename, project_name=project_name, source_name=source_name)
+        _rewrite_job_ini_geometry(
+            job_ini_path,
+            mesh_file=mesh_filename,
+            project_name=project_name,
+            source_name=source_name,
+            mesh_boundary_names=mesh_boundary_names,
+        )
         _patch_piclas_collision_mode(
             job_ini_path,
             collision_mode=self.collision_mode,
@@ -532,7 +590,6 @@ class PiclasSimulator:
         shutil.copy(os.path.join(self.update_dir, 'dyn_p.txt'), os.path.join(job_subdir, 'dyn_p.txt'))
         for filename in [self.ini_low, 'piclas', 'piclas2vtk']:
             shutil.copy(os.path.join(self.piclas_dir, filename), os.path.join(job_subdir, filename))
-        mesh_src = self._resolve_mesh_source(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
         shutil.copy(mesh_src, os.path.join(job_subdir, mesh_filename))
         if debug_paths is not None:
             debug_payload = {
