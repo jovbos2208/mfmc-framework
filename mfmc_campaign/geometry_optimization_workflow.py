@@ -362,7 +362,15 @@ def run_iteration_jobs(state_path_value: str | Path, action: str, *, execute: bo
     ]
     if execute:
         command.append("--execute")
-    completed = subprocess.run(command, check=True, capture_output=True, text=True)
+    completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    if completed.returncode != 0:
+        diagnostic = "\n".join(
+            value.strip() for value in (completed.stdout, completed.stderr) if value.strip()
+        )
+        raise RuntimeError(
+            f"Cylinder-hex {action} subprocess failed with exit code "
+            f"{completed.returncode}:\n{diagnostic}"
+        )
     result = json.loads(completed.stdout)
     iteration["artifacts"]["run_root"] = str(run_root)
     iteration["status"] = "submitted" if action == "submit" and execute else "planned" if action == "submit" else "collected"
