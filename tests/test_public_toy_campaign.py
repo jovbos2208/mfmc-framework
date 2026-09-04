@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -50,9 +51,28 @@ def test_toy_campaign_run_writes_core_outputs(tmp_path: Path) -> None:
     assert summary["n_cells_executed"] == 1
     assert (output_dir / "results_long.csv").exists()
     assert (output_dir / "model_evaluations.csv").exists()
+    assert (output_dir / "sample_inputs.csv").exists()
     assert (output_dir / "pilot_robustness.csv").exists()
     assert (output_dir / "summary.json").exists()
     assert (output_dir / "config_snapshot.json").exists()
 
     summary_json = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary_json["study_id"] == "toy_mock_campaign"
+
+    with (output_dir / "model_evaluations.csv").open(encoding="utf-8", newline="") as source:
+        evaluations = list(csv.DictReader(source))
+    with (output_dir / "sample_inputs.csv").open(encoding="utf-8", newline="") as source:
+        sample_inputs = list(csv.DictReader(source))
+    assert evaluations
+    assert len(evaluations) == len(sample_inputs)
+    assert all(row["sample_fingerprint"] and row["request_fingerprint"] for row in evaluations)
+    assert {
+        (row["qoi"], row["model_id"], row["phase"], row["sample_index"], row["request_fingerprint"])
+        for row in evaluations
+    } == {
+        (row["qoi"], row["model_id"], row["phase"], row["sample_index"], row["request_fingerprint"])
+        for row in sample_inputs
+    }
+
+    assert run_cli(["export-surrogate-dataset", "--output-dir", str(output_dir)]) == 0
+    assert (output_dir / "surrogate_dataset.csv").exists()

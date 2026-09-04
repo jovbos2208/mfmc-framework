@@ -39,6 +39,25 @@ def _fake_mesh(n_elems: int = 4):
 
 
 class TestADBSatPayloadIntegration(unittest.TestCase):
+    def test_generated_geometry_id_resolves_direct_runtime_assets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = pathlib.Path(tmp)
+            (runtime / "inou" / "obj_files").mkdir(parents=True)
+            (runtime / "inou" / "models").mkdir(parents=True)
+            (runtime / "inou" / "obj_files" / "cylinder_hex_wp5_017.obj").touch()
+            (runtime / "inou" / "models" / "cylinder_hex_wp5_017.mat").touch()
+            resolved = adbsat_simulate._resolve_geometry_model(
+                {"geometry_id": "cylinder_hex_wp5_017"}, str(runtime)
+            )
+            self.assertEqual(resolved, "cylinder_hex_wp5_017")
+
+    def test_generated_geometry_id_rejects_path_traversal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            resolved = adbsat_simulate._resolve_geometry_model(
+                {"geometry_id": "../outside"}, tmp, default_model="Cube"
+            )
+            self.assertEqual(resolved, "Cube")
+
     def test_run_simulation_loads_payload_atmosphere_into_inparam(self):
         payload = {
             "environment_model": "csv",

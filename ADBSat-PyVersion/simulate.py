@@ -275,6 +275,13 @@ def _resolve_geometry_model(payload, adbsat_path, default_model="Cube"):
     ]
 
     for cand in candidates:
+        # Generated campaign geometries use their geometry_id as the asset stem.
+        # Accept that stem directly when both assets exist, while rejecting path
+        # separators and other characters that could escape the runtime folders.
+        direct_name = str(cand).strip() if cand is not None else ""
+        if direct_name and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", direct_name):
+            if _geometry_assets_exist(adbsat_path, direct_name):
+                return direct_name
         key = _canonical_geometry_token(cand)
         if not key:
             continue

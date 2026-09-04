@@ -34,7 +34,9 @@ def _canonical_geometry_key(value) -> str:
     return str(value).strip().upper()
 
 
-def _boundary3_source_name(geometry_id=None, geometry_mesh=None) -> str:
+def _boundary3_source_name(geometry_id=None, geometry_mesh=None, object_boundary_name=None) -> str:
+    if object_boundary_name is not None and str(object_boundary_name).strip():
+        return str(object_boundary_name).strip().upper()
     if _canonical_geometry_key(geometry_id) == "CUBE":
         return "CUBE"
     if geometry_mesh:
@@ -42,6 +44,24 @@ def _boundary3_source_name(geometry_id=None, geometry_mesh=None) -> str:
         if mesh_name == "cube_mesh.h5":
             return "CUBE"
     return "OBJ"
+
+
+def _hdf5_boundary_names(mesh_path: str) -> list[str]:
+    """Read boundary names exactly as PICLas will see them in the mesh."""
+    try:
+        with open(mesh_path, "rb") as stream:
+            if stream.read(8) != b"\x89HDF\r\n\x1a\n":
+                return []
+        import h5py
+
+        with h5py.File(mesh_path, "r") as mesh_file:
+            values = mesh_file["BCNames"][...].reshape(-1)
+            return [
+                bytes(value).decode("utf-8", errors="strict").rstrip("\x00").strip()
+                for value in values
+            ]
+    except Exception:
+        return []
 
 
 def _project_name_from_geometry(geometry_id=None, geometry_mesh=None) -> str:
@@ -72,9 +92,32 @@ def _mesh_filename_from_geometry(geometry_id=None, geometry_mesh=None, geometry_
     return os.path.basename(str(mesh_name))
 
 
-def _rewrite_job_ini_geometry(ini_path: str, mesh_file: str, project_name: str, source_name: str) -> None:
+def _rewrite_job_ini_geometry(
+    ini_path: str,
+    mesh_file: str,
+    project_name: str,
+    source_name: str,
+    mesh_boundary_names=None,
+) -> None:
     with open(ini_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
+
+    boundary_lookup = {
+        str(name).strip().upper(): str(name).strip()
+        for name in (mesh_boundary_names or [])
+        if str(name).strip()
+    }
+    requested_boundaries = {1: "IN", 2: "OUT", 3: source_name}
+    if boundary_lookup:
+        missing = [
+            name for name in requested_boundaries.values()
+            if name.upper() not in boundary_lookup
+        ]
+        if missing:
+            raise ValueError(
+                "PICLas particle boundaries are absent from the HDF5 mesh: "
+                f"requested={missing}, available={list(boundary_lookup.values())}"
+            )
 
     updated = []
     for line in lines:
@@ -82,8 +125,17 @@ def _rewrite_job_ini_geometry(ini_path: str, mesh_file: str, project_name: str, 
             updated.append(f"MeshFile = {mesh_file}  ! (relative) path to meshfile\n")
         elif line.lstrip().startswith("ProjectName"):
             updated.append(f"ProjectName     = {project_name}    ! Name of the current simulation\n")
-        elif line.lstrip().startswith("Part-Boundary3-SourceName"):
-            updated.append(f"Part-Boundary3-SourceName  = {source_name}\n")
+        elif any(
+            line.lstrip().startswith(f"Part-Boundary{index}-SourceName")
+            for index in requested_boundaries
+        ):
+            index = next(
+                index for index in requested_boundaries
+                if line.lstrip().startswith(f"Part-Boundary{index}-SourceName")
+            )
+            requested = requested_boundaries[index]
+            actual = boundary_lookup.get(requested.upper(), requested)
+            updated.append(f"Part-Boundary{index}-SourceName  = {actual}\n")
         else:
             updated.append(line)
 
@@ -492,6 +544,7 @@ class PiclasSimulator:
         env_model=None,
         geometry_id=None,
         geometry_mesh=None,
+        object_boundary_name=None,
     ):
         subdir_name = self._make_job_subdir_name(db_index=db_index, aos=AoS, geometry_id=geometry_id)
         job_subdir = os.path.join(self.piclas_dir, subdir_name)
@@ -515,8 +568,20 @@ class PiclasSimulator:
         shutil.copy(os.path.join(self.update_dir, self.ini_high), job_ini_path)
         mesh_filename = self._resolve_mesh_filename(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
         project_name = self._resolve_project_name(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
-        source_name = _boundary3_source_name(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
-        _rewrite_job_ini_geometry(job_ini_path, mesh_file=mesh_filename, project_name=project_name, source_name=source_name)
+        mesh_src = self._resolve_mesh_source(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
+        mesh_boundary_names = _hdf5_boundary_names(mesh_src)
+        source_name = _boundary3_source_name(
+            geometry_id=geometry_id,
+            geometry_mesh=geometry_mesh,
+            object_boundary_name=object_boundary_name,
+        )
+        _rewrite_job_ini_geometry(
+            job_ini_path,
+            mesh_file=mesh_filename,
+            project_name=project_name,
+            source_name=source_name,
+            mesh_boundary_names=mesh_boundary_names,
+        )
         _patch_piclas_collision_mode(
             job_ini_path,
             collision_mode=self.collision_mode,
@@ -525,7 +590,6 @@ class PiclasSimulator:
         shutil.copy(os.path.join(self.update_dir, 'dyn_p.txt'), os.path.join(job_subdir, 'dyn_p.txt'))
         for filename in [self.ini_low, 'piclas', 'piclas2vtk']:
             shutil.copy(os.path.join(self.piclas_dir, filename), os.path.join(job_subdir, filename))
-        mesh_src = self._resolve_mesh_source(geometry_id=geometry_id, geometry_mesh=geometry_mesh)
         shutil.copy(mesh_src, os.path.join(job_subdir, mesh_filename))
         if debug_paths is not None:
             debug_payload = {
@@ -564,9 +628,9 @@ class PiclasSimulator:
             "#SBATCH --error=piclas_slurm-%j.err",
             "",
             "ulimit -l 83886080",
-            "module load gcc/12.3.0",
-            "module load openmpi/4.1.5",
-            "module load hdf5/1.12.2",
+            "module load gcc",
+            "module load openmpi",
+            "module load hdf5",
             "",
             f"cd {job_subdir}",
             "",
@@ -606,9 +670,9 @@ class PiclasSimulator:
             "#SBATCH --error=piclas_group-%j.err",
             "",
             "ulimit -l 83886080",
-            "module load gcc/12.3.0",
-            "module load openmpi/4.1.5",
-            "module load hdf5/1.12.2",
+            "module load gcc",
+            "module load openmpi",
+            "module load hdf5",
             "",
             "run_case() {",
             "  local case_dir=\"$1\"",
@@ -771,9 +835,9 @@ class PiclasSimulator:
             "#SBATCH --output=piclas_postproc-%j.out",
             "#SBATCH --error=piclas_postproc-%j.err",
             "",
-            "module load gcc/12.3.0",
-            "module load openmpi/4.1.5",
-            "module load hdf5/1.12.2",
+            "module load gcc",
+            "module load openmpi",
+            "module load hdf5",
             "",
             "MAX_PARALLEL=${SLURM_NTASKS:-64}",
             "running=0",
@@ -940,7 +1004,7 @@ class PiclasSimulator:
             if not output_files:
                 raise FileNotFoundError(f"Keine output*.vtu Dateien gefunden in {subdir}")
             area_file = output_files[0]
-            areas, _A_wetted = cell_areas_and_total(area_file)
+            areas, A_wetted = cell_areas_and_total(area_file)
             A_ref = wind_projected_reference_area(area_file, flow_dir, areas)
             # Preserve the established moment convention while drag/lift use
             # the wind-projected reference area.
@@ -1020,6 +1084,7 @@ class PiclasSimulator:
         geometry_id=None,
         geometry_mesh=None,
         flow_zero_direction=None,
+        object_boundary_name=None,
     ):
         job_ids = []
         job_subdirs = []
@@ -1041,6 +1106,7 @@ class PiclasSimulator:
                 env_model=env_model,
                 geometry_id=geometry_id,
                 geometry_mesh=geometry_mesh,
+                object_boundary_name=object_boundary_name,
             )
             job_subdirs.append(job_subdir)
             group_subdirs.append(job_subdir)

@@ -95,6 +95,30 @@ MODEL_EVALUATION_COLUMNS = [
     "cost",
 ]
 
+SAMPLE_INPUT_BASE_COLUMNS = [
+    "study_id",
+    "cell_id",
+    "phase",
+    "mode",
+    "geometry_id",
+    "regime_id",
+    "active_sources",
+    "qoi",
+    "model_id",
+    "fidelity",
+    "hf_model_id",
+    "lf_model_id",
+    "pilot_size",
+    "budget",
+    "repetition",
+    "seed",
+    "sample_id",
+    "sample_index",
+    "sample_fingerprint",
+    "request_fingerprint",
+    "geometry_characteristic_length",
+]
+
 ROBUSTNESS_COLUMNS = [
     "study_id",
     "cell_id",
@@ -165,6 +189,7 @@ class ResultStore:
 
         self.results_csv = os.path.join(self.output_dir, "results_long.csv")
         self.model_evaluations_csv = os.path.join(self.output_dir, "model_evaluations.csv")
+        self.sample_inputs_csv = os.path.join(self.output_dir, "sample_inputs.csv")
         self.robustness_csv = os.path.join(self.output_dir, "pilot_robustness.csv")
         self.summary_json = os.path.join(self.output_dir, "summary.json")
         self.config_json = os.path.join(self.output_dir, "config_snapshot.json")
@@ -180,9 +205,11 @@ class ResultStore:
         removable = [
             self.results_csv,
             self.model_evaluations_csv,
+            self.sample_inputs_csv,
             self.robustness_csv,
             self.summary_json,
             os.path.join(self.output_dir, "predictive_dataset.csv"),
+            os.path.join(self.output_dir, "surrogate_dataset.csv"),
             os.path.join(self.output_dir, "results_long.parquet"),
             self.source_ranking_csv,
             self.regime_dependence_csv,
@@ -295,6 +322,28 @@ class ResultStore:
                 payload["active_sources"] = "+".join(payload["active_sources"])
             payloads.append(payload)
         self._append_csv_rows(self.model_evaluations_csv, MODEL_EVALUATION_COLUMNS, payloads)
+
+    def append_sample_inputs(self, rows: List[Dict[str, Any]]) -> None:
+        """Append requested inputs while allowing new numeric input columns over time."""
+        if not rows:
+            return
+        payloads: List[Dict[str, Any]] = []
+        dynamic_columns: Set[str] = set()
+        for row in rows:
+            payload = dict(row)
+            if isinstance(payload.get("active_sources"), list):
+                payload["active_sources"] = "+".join(payload["active_sources"])
+            payloads.append(payload)
+            dynamic_columns.update(set(payload) - set(SAMPLE_INPUT_BASE_COLUMNS))
+
+        existing_dynamic: List[str] = []
+        if os.path.exists(self.sample_inputs_csv):
+            with open(self.sample_inputs_csv, "r", encoding="utf-8", newline="") as existing:
+                header = next(csv.reader(existing), [])
+            existing_dynamic = [name for name in header if name not in SAMPLE_INPUT_BASE_COLUMNS]
+        fields = SAMPLE_INPUT_BASE_COLUMNS + existing_dynamic
+        fields.extend(sorted(dynamic_columns - set(existing_dynamic)))
+        self._append_csv_rows(self.sample_inputs_csv, fields, payloads)
 
     def append_robustness(self, row: Dict[str, Any]) -> None:
         payload = dict(row)

@@ -32,7 +32,8 @@ if str(ADBSAT_PY_DIR) not in sys.path:
 if str(UPDATE_PARAMETER_DIR) not in sys.path:
     sys.path.insert(0, str(UPDATE_PARAMETER_DIR))
 
-from PICLas import PiclasSimulator
+from PICLas import PiclasSimulator, _boundary3_source_name
+from PICLas_prandtl import PiclasSimulator as PrandtlPiclasSimulator
 import update_parameter as piclas_update
 from calc.environment import environment as adbsat_environment
 
@@ -53,6 +54,26 @@ class _FakeMesh:
 
 
 class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
+    def test_explicit_piclas_object_boundary_overrides_legacy_obj_default(self):
+        self.assertEqual(
+            "CYLINDER_HEX",
+            _boundary3_source_name(
+                geometry_id="cylinder_hex_scale_0p1",
+                geometry_mesh="cylinder_hex_scale_0p1_mesh.h5",
+                object_boundary_name="CYLINDER_HEX",
+            ),
+        )
+        self.assertEqual(
+            "CYLINDER_HEX",
+            piclas_update._resolve_boundary3_source_name(
+                {
+                    "geometry_id": "cylinder_hex_scale_0p1",
+                    "hf_mesh": "cylinder_hex_scale_0p1_mesh.h5",
+                    "piclas_object_boundary_name": "CYLINDER_HEX",
+                }
+            ),
+        )
+
     def _assert_update_parameter_geometry(self, geometry_id: str, mesh_name: str, source_name: str):
         payload = {
             "geometry_id": geometry_id,
@@ -268,16 +289,13 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             states = sim._query_job_states(["123"])
 
         self.assertEqual("CG", states.get("123"))
-        self.assertEqual("R", states.get("1234"))
+        self.assertNotIn("1234", states)
         self.assertNotIn("12", states)
 
-    def test_piclas_wait_for_job_completion_breaks_on_cg(self):
+    def test_piclas_wait_for_job_completion_treats_cg_as_complete(self):
         sim = PiclasSimulator()
         squeue_result = subprocess.CompletedProcess(
-            args=["squeue"],
-            returncode=0,
-            stdout="123 CG\n",
-            stderr="",
+            args=["squeue"], returncode=0, stdout="123 CG\n", stderr=""
         )
 
         with patch("PICLas.subprocess.run", return_value=squeue_result) as run_mock, patch(
@@ -287,6 +305,26 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
 
         self.assertEqual(1, run_mock.call_count)
         sleep_mock.assert_not_called()
+
+    def test_piclas_wait_for_job_completion_retries_failed_squeue_query(self):
+        sim = PiclasSimulator()
+        squeue_results = [
+            subprocess.CalledProcessError(
+                1,
+                ["squeue"],
+                stderr="slurm_load_jobs error: Socket timed out on send/recv operation",
+            ),
+            subprocess.CompletedProcess(args=["squeue"], returncode=0, stdout="123 R\n", stderr=""),
+            subprocess.CompletedProcess(args=["squeue"], returncode=0, stdout="", stderr=""),
+        ]
+
+        with patch("PICLas.subprocess.run", side_effect=squeue_results) as run_mock, patch(
+            "PICLas.time.sleep", return_value=None
+        ) as sleep_mock:
+            sim._wait_for_job_completion("123", poll_interval=1)
+
+        self.assertEqual(3, run_mock.call_count)
+        self.assertEqual(2, sleep_mock.call_count)
 
     def test_piclas_wait_for_job_completion_polls_through_pd_and_r_until_missing(self):
         sim = PiclasSimulator()
@@ -335,6 +373,20 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
         self.assertEqual(3, run_mock.call_count)
         self.assertEqual(2, sleep_mock.call_count)
 
+    def test_piclas_wait_for_all_jobs_completion_drops_all_cg_jobs_immediately(self):
+        sim = PiclasSimulator()
+        squeue_result = subprocess.CompletedProcess(
+            args=["squeue"], returncode=0, stdout="1 CG\n2 CG\n", stderr=""
+        )
+
+        with patch("PICLas.subprocess.run", return_value=squeue_result) as run_mock, patch(
+            "PICLas.time.sleep", return_value=None
+        ) as sleep_mock:
+            sim._wait_for_all_jobs_completion(["1", "2"], poll_interval=1)
+
+        self.assertEqual(1, run_mock.call_count)
+        sleep_mock.assert_not_called()
+
     def test_piclas_retries_missing_h5_outputs_once_and_recovers(self):
         with tempfile.TemporaryDirectory() as td:
             ok_dir = os.path.join(td, "job_ok")
@@ -347,7 +399,7 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             with open(os.path.join(retry_dir, "job_piclas.sh"), "w", encoding="utf-8") as f:
                 f.write("#!/bin/bash\n")
 
-            sim = PiclasSimulator(job_template="job_piclas.sh")
+            sim = PiclasSimulator(piclas_dir=td, job_template="job_piclas.sh")
             wait_calls = {"count": 0}
 
             def fake_wait(job_ids, poll_interval=60):
@@ -361,12 +413,40 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
                         ).close()
 
             with patch.object(sim, "_wait_for_all_jobs_completion", side_effect=fake_wait), patch.object(
-                sim, "submit_simulation_job", return_value="retry-1"
-            ) as submit_mock, patch("PICLas.time.sleep", return_value=None):
+                sim,
+                "_query_job_nodes",
+                return_value={"job-2": {"node": "cn0231", "state": "FAILED"}},
+            ), patch.object(sim, "submit_simulation_job", return_value="retry-1") as submit_mock, patch(
+                "PICLas.time.sleep", return_value=None
+            ):
                 sim._wait_for_jobs_and_retry_failed_outputs([ok_dir, retry_dir], ["job-1", "job-2"], max_retries=2)
+
+            retry_script = pathlib.Path(retry_dir, "job_piclas.sh").read_text(encoding="utf-8")
+            self.assertIn("#SBATCH --exclude=cn0916,cn0467,cn0687,cn0231", retry_script)
+            self.assertEqual("cn0231\n", pathlib.Path(td, "bad_nodes.txt").read_text(encoding="utf-8"))
 
         self.assertEqual(2, wait_calls["count"])
         self.assertEqual(1, submit_mock.call_count)
+
+    def test_piclas_persistent_bad_nodes_are_excluded_by_future_simulators(self):
+        with tempfile.TemporaryDirectory() as td:
+            first = PiclasSimulator(piclas_dir=td)
+            first._record_bad_nodes(["cn0768", "cn0231", "invalid,node"])
+
+            job_dir = pathlib.Path(td, "future case")
+            job_dir.mkdir()
+            second = PiclasSimulator(piclas_dir=td, mpi_procs=64)
+            script_path = second.create_simulation_job_script(str(job_dir))
+            script = pathlib.Path(script_path).read_text(encoding="utf-8")
+
+            self.assertIn(
+                "#SBATCH --exclude=cn0916,cn0467,cn0687,cn0231,cn0768",
+                script,
+            )
+            self.assertEqual(
+                "cn0231\ncn0768\n",
+                pathlib.Path(td, "bad_nodes.txt").read_text(encoding="utf-8"),
+            )
 
     def test_piclas_tpmc_still_requires_configured_surface_state_outputs(self):
         with tempfile.TemporaryDirectory() as td:
@@ -474,6 +554,34 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
         self.assertAlmostEqual(expected_cm[2], qois["C_Mz"][0], places=12)
         self.assertEqual([4.0], cpu_h)
 
+    def test_prandtl_piclas_collect_results_qois_uses_wetted_area_for_moment_length(self):
+        force_per_area = np.asarray([[0.0, -1.0, 0.5], [0.0, -2.0, 1.5]], dtype=float)
+        centers = np.asarray([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], dtype=float)
+
+        with tempfile.TemporaryDirectory() as td:
+            for name in ["output1.vtu", "output2.vtu"]:
+                open(os.path.join(td, name), "w", encoding="utf-8").close()
+            with open(os.path.join(td, "dyn_p.txt"), "w", encoding="utf-8") as f:
+                f.write("2.0\n")
+            with open(os.path.join(td, "cpu_time.txt"), "w", encoding="utf-8") as f:
+                f.write("3600000\n")
+
+            sim = PrandtlPiclasSimulator(mpi_procs=4)
+            with patch(
+                "PICLas_prandtl.cell_areas_and_total",
+                return_value=(np.asarray([2.0, 2.0], dtype=float), 4.0),
+            ), patch(
+                "PICLas_prandtl.wind_projected_reference_area", return_value=1.0
+            ), patch(
+                "PICLas_prandtl.pv.read", return_value=_FakeMesh(force_per_area, centers)
+            ):
+                qois, cpu_h = sim.collect_results_qois([td], AoS=[0.0], AoA=[0.0])
+
+        self.assertAlmostEqual(1.0, qois["C_Mx"][0], places=12)
+        self.assertAlmostEqual(-0.25, qois["C_My"][0], places=12)
+        self.assertAlmostEqual(-0.5, qois["C_Mz"][0], places=12)
+        self.assertEqual([4.0], cpu_h)
+
     def test_prepare_simulation_folder_uses_geometry_specific_mesh_and_project(self):
         self._assert_prepare_simulation_folder_geometry("GOCE", "GOCE_mesh.h5", "OBJ")
 
@@ -544,6 +652,53 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
 
         self.assertAlmostEqual(expected_vinf, float(adbsat_param["vinf"]), places=9)
         self.assertAlmostEqual(expected_vth, float(adbsat_param["vth"]), places=9)
+
+    def test_single_job_script_launches_piclas_directly_with_srun(self):
+        with tempfile.TemporaryDirectory() as td:
+            job_dir = pathlib.Path(td, "single case")
+            job_dir.mkdir()
+            sim = PiclasSimulator(piclas_dir=td, mpi_procs=64)
+
+            script_path = sim.create_simulation_job_script(str(job_dir))
+            script = pathlib.Path(script_path).read_text(encoding="utf-8")
+
+            self.assertNotIn("#SBATCH --requeue", script)
+            self.assertIn("#SBATCH --open-mode=append", script)
+            self.assertNotIn("SLURM_RESTART_COUNT", script)
+            self.assertNotIn("PICLAS_LAUNCH_TIMEOUT_SECONDS", script)
+            self.assertNotIn("run_piclas_with_launch_watchdog", script)
+            self.assertNotIn("watchdog_pid", script)
+            self.assertIn(
+                'srun $SRUN_MPI_OPT --kill-on-bad-exit=1 -n "$NTASKS" ./piclas parameter.ini DSMC1.ini',
+                script,
+            )
+            self.assertNotIn("scontrol requeue", script)
+            self.assertIn("--kill-on-bad-exit=1", script)
+            self.assertNotIn("mpirun", script)
+            subprocess.run(["bash", "-n", script_path], check=True)
+
+    def test_group_job_script_launches_piclas_directly_with_srun(self):
+        with tempfile.TemporaryDirectory() as td:
+            case_dirs = [pathlib.Path(td, "case one"), pathlib.Path(td, "case two")]
+            for case_dir in case_dirs:
+                case_dir.mkdir()
+            sim = PiclasSimulator(piclas_dir=td, mpi_procs=64)
+
+            script_path = sim.create_simulation_group_job_script([str(path) for path in case_dirs])
+            script = pathlib.Path(script_path).read_text(encoding="utf-8")
+
+            self.assertNotIn("#SBATCH --requeue", script)
+            self.assertNotIn("SLURM_RESTART_COUNT", script)
+            self.assertNotIn("PICLAS_LAUNCH_TIMEOUT_SECONDS", script)
+            self.assertNotIn("run_piclas_with_launch_watchdog", script)
+            self.assertIn(
+                'srun $SRUN_MPI_OPT --kill-on-bad-exit=1 -n "$NTASKS" ./piclas parameter.ini DSMC1.ini',
+                script,
+            )
+            self.assertNotIn("scontrol requeue", script)
+            self.assertNotIn("success_marker", script)
+            self.assertNotIn("mpirun", script)
+            subprocess.run(["bash", "-n", script_path], check=True)
 
 
 if __name__ == "__main__":

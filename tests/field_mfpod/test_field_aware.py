@@ -80,6 +80,73 @@ def test_field_allocation_is_integer_nested_and_has_separate_weights():
     assert result.diagnostics["tpmc_basis_used"] is False
 
 
+def test_optional_informative_control_is_activated_by_scalable_strategies():
+    rng = np.random.default_rng(27)
+    high = rng.normal(size=(120, 5))
+    control = high + 0.02 * rng.normal(size=high.shape)
+    fields = {"DSMC": high, "TPMC": control}
+    costs = {"DSMC": 1.0, "TPMC": 0.08}
+
+    for mode in ("greedy", "continuous_round"):
+        result = optimize_field_allocation(
+            fields,
+            costs,
+            AllocationOptions(
+                budget=20.0,
+                minimum_target=2,
+                minimum_counts={},
+                maximum_counts={"DSMC": 20, "TPMC": 200},
+                min_ratios={},
+                max_ratios={"TPMC": 10.0},
+                mode=mode,
+                mean_weight=0.25,
+                second_moment_weight=0.75,
+            ),
+        )
+        assert result.counts["TPMC"] > result.counts["DSMC"]
+        assert result.total_cost <= 20.0 + 1.0e-12
+
+
+def test_bootstrap_robust_search_includes_optional_control_subsets():
+    rng = np.random.default_rng(71)
+    high = rng.normal(size=(40, 5))
+    useful = high + 0.05 * rng.normal(size=high.shape)
+    useless = rng.normal(size=high.shape)
+    common = {
+        "budget": 12.0,
+        "minimum_target": 2,
+        "minimum_counts": {},
+        "min_ratios": {},
+        "max_ratios": {},
+        "mode": "bootstrap_robust",
+        "bootstrap_repeats": 100,
+        "random_seed": 81,
+        "max_enumeration_candidates": 1_000,
+        "mean_weight": 0.25,
+        "second_moment_weight": 0.75,
+    }
+    two_fidelity = optimize_field_allocation(
+        {"DSMC": high, "TPMC": useful},
+        {"DSMC": 1.0, "TPMC": 0.1},
+        AllocationOptions(
+            **common,
+            maximum_counts={"DSMC": 12, "TPMC": 100},
+        ),
+    )
+    optional_three_fidelity = optimize_field_allocation(
+        {"DSMC": high, "TPMC": useful, "SENTMAN": useless},
+        {"DSMC": 1.0, "TPMC": 0.1, "SENTMAN": 0.01},
+        AllocationOptions(
+            **common,
+            maximum_counts={"DSMC": 12, "TPMC": 100, "SENTMAN": 100},
+        ),
+    )
+    assert optional_three_fidelity.counts["SENTMAN"] == 0
+    assert optional_three_fidelity.counts["DSMC"] == two_fidelity.counts["DSMC"]
+    assert optional_three_fidelity.counts["TPMC"] == two_fidelity.counts["TPMC"]
+    assert np.isclose(optional_three_fidelity.objective, two_fidelity.objective)
+
+
 def test_full_field_mean_and_covariance_action_match_explicit_estimator():
     fields = paired_fields(samples=18, dimension=5)
     counts = {"DSMC": 6, "TPMC": 12, "SENTMAN": 15}

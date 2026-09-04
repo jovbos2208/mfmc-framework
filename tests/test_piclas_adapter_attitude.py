@@ -7,6 +7,7 @@ import numpy as np
 from mfmc_campaign.adapters import (
     BaseModelAdapter,
     LegacyPiclasAdapter,
+    _build_environment_payload,
     _angles_from_flow_vector,
     _estimate_freestream_speed_mps,
     _flow_unit_from_angles,
@@ -16,6 +17,40 @@ from mfmc_campaign.adapters import (
 
 
 class TestPiclasAdapterAttitude(unittest.TestCase):
+    def test_geometry_reference_area_is_forwarded_without_hdf5_derivation(self):
+        request = make_request(
+            study_id="s",
+            cell_id="c",
+            model_id="PICLas_HF",
+            fidelity="hf",
+            qois=["C_D"],
+            geometry={
+                "id": "cylinder_hex_scale_0p1",
+                "name": "cylinder_hex_scale_0p1",
+                "metadata": {
+                    "hf_mesh": "missing_mesh_is_not_opened.h5",
+                    "piclas_object_boundary_name": "CYLINDER_HEX",
+                    "reference_area_m2": 0.001513558965734707,
+                },
+            },
+            regime={"id": "vleo", "descriptors": {"altitude_km": 250.0}},
+            active_source_blocks=[],
+            sample_ids=["sample-0"],
+            samples=[{"database_index": 0}],
+            seed=1,
+            metadata={"environment_model": "csv", "flow_zero_direction": [1.0, 0.0, 0.0]},
+        )
+
+        payload = _build_environment_payload(
+            request.samples[0], request.regime, request.metadata, request.geometry
+        )
+
+        self.assertAlmostEqual(0.001513558965734707, payload["reference_area_m2"], places=15)
+        self.assertAlmostEqual(0.001513558965734707, payload["piclas_reference_area_m2"], places=15)
+        self.assertEqual("explicit_payload", payload["reference_area_source"])
+        self.assertEqual("CYLINDER_HEX", payload["piclas_object_boundary_name"])
+        self.assertEqual([1.0, 0.0, 0.0], payload["flow_zero_direction"])
+
     def test_legacy_piclas_tpmc_can_be_registered_as_lf(self):
         captured_kwargs = []
 
@@ -131,7 +166,11 @@ class TestPiclasAdapterAttitude(unittest.TestCase):
             model_id="PICLas_TPMC",
             fidelity="lf",
             qois=["C_D"],
-            geometry={"id": "Cube", "name": "Cube"},
+            geometry={
+                "id": "Cube",
+                "name": "Cube",
+                "metadata": {"piclas_object_boundary_name": "CYLINDER_HEX"},
+            },
             regime={"id": "r", "label": "r", "descriptors": {"altitude_km": 200}},
             active_source_blocks=[],
             sample_ids=["a"],
@@ -150,6 +189,9 @@ class TestPiclasAdapterAttitude(unittest.TestCase):
 
         adapter.evaluate(req)
         self.assertEqual("tpmc", captured["payload"]["piclas_mode"])
+        self.assertEqual(
+            "CYLINDER_HEX", captured["payload"]["piclas_object_boundary_name"]
+        )
         self.assertAlmostEqual(1.0e-4, float(captured["payload"]["t_end_s"]), places=12)
         self.assertEqual(250, int(captured["payload"]["sampling_iterations"]))
         self.assertNotIn("macro_particle_factor_scale", captured["payload"])

@@ -75,6 +75,13 @@ write generated results below `outputs/`. The archive format and conservative
 Sentman mapping are documented in [docs/field_pod_mfmc.md](docs/field_pod_mfmc.md).
 The checkpoint-by-checkpoint cluster procedure is documented in
 [docs/mfpod_cluster_runbook.md](docs/mfpod_cluster_runbook.md).
+The restartable, surrogate-free cylinder-hex TPMC/Sentman geometry optimization
+and its strictly post-optimization DSMC validation are documented in
+[docs/cylinder_hex_mfmc_optimization.md](docs/cylinder_hex_mfmc_optimization.md).
+The same workflow now supports a fixed-volume, ten-degree-of-freedom symmetric
+surface-control-node trust region with exactly 20 TPMC runs per geometry and a
+restartable Sentman step; start from
+`configs/studies/cylinder_hex_control_node_mfmc_optimization.example.json`.
 The `production` command owns the persisted sample plan, paired pilots,
 pilot-cost allocation, nested production streams, DSMC-only reference set,
 and final analysis. Run it from the repository root because solver paths in

@@ -838,6 +838,15 @@ def _build_environment_payload(
                 payload["lf_model"] = geometry.metadata.get("lf_model")
             if "hf_mesh" in geometry.metadata:
                 payload["hf_mesh"] = geometry.metadata.get("hf_mesh")
+            for key in (
+                "reference_area_m2",
+                "piclas_reference_area_m2",
+                "area_ref_m2",
+                "A_ref",
+                "piclas_object_boundary_name",
+            ):
+                if key in geometry.metadata:
+                    payload[key] = geometry.metadata[key]
             for key in _PICLAS_MPF_OVERRIDE_KEYS:
                 if key in geometry.metadata:
                     payload[key] = geometry.metadata[key]
@@ -909,6 +918,7 @@ def _build_environment_payload(
         "A_ref",
         "atmosphere_row",
         "trajectory_index",
+        "piclas_object_boundary_name",
     ]:
         if key in metadata:
             payload[key] = metadata[key]
@@ -1126,24 +1136,54 @@ class LegacyPiclasAdapter(BaseModelAdapter):
         altitude, aos, _aoa, indices, env_model, payload_dir, env_payload_paths, aos_values, aoa_values, random_seeds = self._prepare_batch_request(request)
         try:
             if hasattr(self.sim, "submit_batch_jobs"):
-                batch_handle = self.sim.submit_batch_jobs(
-                    altitude,
-                    aos,
-                    indices,
-                    env_payload_paths=env_payload_paths,
-                    env_model=env_model,
-                    aos_values=aos_values,
-                    aoa_values=aoa_values,
-                    random_seeds=random_seeds,
-                    geometry_id=request.geometry.geometry_id,
-                    geometry_mesh=request.metadata.get("hf_mesh", request.geometry.metadata.get("hf_mesh")),
-                    flow_zero_direction=request.metadata.get(
+                submit_method = self.sim.submit_batch_jobs
+                submit_kwargs = {
+                    "env_payload_paths": env_payload_paths,
+                    "env_model": env_model,
+                    "aos_values": aos_values,
+                    "aoa_values": aoa_values,
+                    "random_seeds": random_seeds,
+                    "geometry_id": request.geometry.geometry_id,
+                    "geometry_mesh": request.metadata.get(
+                        "hf_mesh", request.geometry.metadata.get("hf_mesh")
+                    ),
+                    "flow_zero_direction": request.metadata.get(
                         "flow_zero_direction",
                         request.metadata.get(
                             "flow_zero_direction_xyz",
-                            request.metadata.get("zero_flow_direction", request.metadata.get("zero_flow_direction_xyz")),
+                            request.metadata.get(
+                                "zero_flow_direction",
+                                request.metadata.get("zero_flow_direction_xyz"),
+                            ),
                         ),
                     ),
+                    "object_boundary_name": request.metadata.get(
+                        "piclas_object_boundary_name",
+                        request.geometry.metadata.get("piclas_object_boundary_name"),
+                    ),
+                }
+                submit_kwargs = {
+                    key: value for key, value in submit_kwargs.items() if value is not None
+                }
+                try:
+                    signature = inspect.signature(submit_method)
+                    accepts_kwargs = any(
+                        parameter.kind == inspect.Parameter.VAR_KEYWORD
+                        for parameter in signature.parameters.values()
+                    )
+                    if not accepts_kwargs:
+                        submit_kwargs = {
+                            key: value
+                            for key, value in submit_kwargs.items()
+                            if key in signature.parameters
+                        }
+                except (TypeError, ValueError):
+                    pass
+                batch_handle = submit_method(
+                    altitude,
+                    aos,
+                    indices,
+                    **submit_kwargs,
                 )
             else:
                 qoi_values, cpu_hours_list = self.sim.run_batch_qois(

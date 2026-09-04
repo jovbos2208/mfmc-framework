@@ -8,7 +8,7 @@ reproducibility, but is not the production default.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from itertools import product
+from itertools import combinations, product
 from math import ceil, floor
 from typing import Iterable, Mapping, Sequence
 
@@ -277,7 +277,14 @@ def _greedy_counts(names, costs, options, covariance, weights):
         # Activating an optional control requires a paired block, not one sample.
         for index, name in enumerate(names):
             trial = counts.copy()
-            trial[index] += 1 if index == 0 or trial[index] > 0 else counts[0]
+            if index == 0 or trial[index] > 0:
+                trial[index] += 1
+            else:
+                # At n_i == n_H the nested control correction is identically
+                # zero, so a one-step greedy method would see no benefit and
+                # could never activate an optional control. Test the smallest
+                # useful active block, which has one unpaired control sample.
+                trial[index] = counts[0] + 1
             if index == 0:
                 for j, control in enumerate(names[1:], start=1):
                     if trial[j] > 0 and trial[j] < trial[0]:
@@ -303,6 +310,15 @@ def _continuous_round_counts(names, costs, options, covariance, weights):
     start = _minimum_feasible(names, costs, options).astype(float)
     if not _feasible(start, names, costs, options, integer=False):
         start = lower.astype(float)
+    # The relaxation below treats every configured control as active. Start
+    # each optional control with one sample beyond the paired target block;
+    # n_i == n_H has an identically zero correction and a singular local
+    # objective, while n_i == 0 violates the relaxation's active constraints.
+    active_start = start.copy()
+    for index in range(1, len(names)):
+        active_start[index] = max(active_start[index], active_start[0] + 1.0)
+    if _feasible(active_start, names, costs, options, integer=False):
+        start = active_start
     constraints = [{"type": "ineq", "fun": lambda x: options.budget - np.dot(x, [costs[n] for n in names])}]
     for index, name in enumerate(names[1:], start=1):
         min_ratio = float(options.min_ratios.get(name, 0.0))
@@ -524,22 +540,103 @@ def optimize_field_allocation(
     continuous_diag = None
     if mode == "enumeration":
         candidates = list(_enumerate_counts(list(names), normalized_costs, options))
-    elif mode == "greedy":
-        selected, rows = _greedy_counts(list(names), normalized_costs, options, covariance, block_weights)
-        candidates = [selected]
     else:
-        rounded, rounded_rows, continuous_diag = _continuous_round_counts(
-            list(names), normalized_costs, options, covariance, block_weights
-        )
-        greedy, greedy_rows = _greedy_counts(
-            list(names), normalized_costs, options, covariance, block_weights
-        )
-        rows = rounded_rows + greedy_rows
-        candidates = [rounded, greedy]
-        candidates.extend(
-            np.asarray(tuple(int(row[f"n_{name}"]) for name in names), dtype=int)
-            for row in rows
-        )
+        # Optional controls define distinct active-set subproblems.  Searching
+        # only the all-control relaxation can miss a better DSMC--TPMC,
+        # DSMC--Sentman, or DSMC-only candidate because a zero-benefit control
+        # may distort the rounded starting point.  Generate scalable candidates
+        # for every admissible control subset, then score all padded candidates
+        # against the same full pilot/bootstrap covariance blocks below.
+        candidates = []
+        controls = list(names[1:])
+        for subset_size in range(len(controls) + 1):
+            for active_controls in combinations(controls, subset_size):
+                active = (names[0], *active_controls)
+                omitted = set(controls) - set(active_controls)
+                if any(
+                    int(options.minimum_counts.get(name, 0)) > 0
+                    or float(options.min_ratios.get(name, 0.0)) > 0.0
+                    for name in omitted
+                ):
+                    continue
+                active_indices = [names.index(name) for name in active]
+                active_covariance = covariance[
+                    :, active_indices, :
+                ][:, :, active_indices]
+                active_costs = {name: normalized_costs[name] for name in active}
+                active_options = AllocationOptions(
+                    **{
+                        **asdict(options),
+                        "minimum_counts": {
+                            key: value
+                            for key, value in options.minimum_counts.items()
+                            if str(key).upper() in active
+                        },
+                        "maximum_counts": {
+                            key: value
+                            for key, value in options.maximum_counts.items()
+                            if str(key).upper() in active
+                        },
+                        "min_ratios": {
+                            key: value
+                            for key, value in options.min_ratios.items()
+                            if str(key).upper() in active
+                        },
+                        "max_ratios": {
+                            key: value
+                            for key, value in options.max_ratios.items()
+                            if str(key).upper() in active
+                        },
+                    }
+                )
+
+                subset_candidates = []
+                subset_rows = []
+                if mode == "greedy" or len(active) == 1:
+                    greedy, greedy_rows = _greedy_counts(
+                        list(active),
+                        active_costs,
+                        active_options,
+                        active_covariance,
+                        block_weights,
+                    )
+                    subset_candidates.append(greedy)
+                    subset_rows.extend(greedy_rows)
+                else:
+                    rounded, rounded_rows, subset_diag = _continuous_round_counts(
+                        list(active),
+                        active_costs,
+                        active_options,
+                        active_covariance,
+                        block_weights,
+                    )
+                    greedy, greedy_rows = _greedy_counts(
+                        list(active),
+                        active_costs,
+                        active_options,
+                        active_covariance,
+                        block_weights,
+                    )
+                    subset_candidates.extend((rounded, greedy))
+                    subset_rows.extend(rounded_rows + greedy_rows)
+                    if len(active) == len(names):
+                        continuous_diag = subset_diag
+                subset_candidates.extend(
+                    np.asarray(
+                        tuple(int(row[f"n_{name}"]) for name in active), dtype=int
+                    )
+                    for row in subset_rows
+                )
+                for subset_candidate in subset_candidates:
+                    padded = np.zeros(len(names), dtype=int)
+                    for name, value in zip(active, subset_candidate):
+                        padded[names.index(name)] = int(value)
+                    candidates.append(padded)
+                for row in subset_rows:
+                    padded_row = dict(row)
+                    for name in omitted:
+                        padded_row[f"n_{name}"] = 0
+                    rows.append(padded_row)
         if mode == "bootstrap_robust":
             try:
                 candidates.extend(_enumerate_counts(list(names), normalized_costs, options))

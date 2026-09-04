@@ -22,6 +22,7 @@ from .estimator import (
     statistical_flags,
 )
 from .experiments import generate_experiment_cells
+from .fingerprints import request_fingerprints, sample_fingerprints
 from .output import EvaluationCache, ResultStore, export_predictive_dataset, write_summary_tables
 from .plotting import generate_plots
 from .qoi_registry import build_qoi_registry
@@ -1261,6 +1262,8 @@ def _build_result_row(
 def _append_model_evaluation_rows(store: ResultStore, cell, request, result, phase: str) -> None:
     values_by_qoi = result.values_by_qoi if isinstance(result.values_by_qoi, dict) else {}
     qois = [str(q) for q in request.qois]
+    sample_hashes = sample_fingerprints(request.samples)
+    request_hashes = request_fingerprints(request)
     max_len = max(
         [len(result.sample_ids), len(result.costs)] + [len(values_by_qoi.get(q, [])) for q in qois],
         default=0,
@@ -1289,6 +1292,8 @@ def _append_model_evaluation_rows(store: ResultStore, cell, request, result, pha
                     "seed": request.seed,
                     "sample_id": result.sample_ids[idx] if idx < len(result.sample_ids) else "",
                     "sample_index": idx,
+                    "sample_fingerprint": sample_hashes[idx] if idx < len(sample_hashes) else "",
+                    "request_fingerprint": request_hashes[idx] if idx < len(request_hashes) else "",
                     "value": vals[idx] if idx < len(vals) else float("nan"),
                     "cost": result.costs[idx] if idx < len(result.costs) else float("nan"),
                 }
@@ -1298,6 +1303,42 @@ def _append_model_evaluation_rows(store: ResultStore, cell, request, result, pha
     else:
         for row in rows:
             store.append_model_evaluation(row)
+
+    input_rows: List[Dict[str, Any]] = []
+    geometry_metadata = request.geometry.metadata if isinstance(request.geometry.metadata, dict) else {}
+    for qoi in qois:
+        for idx, sample in enumerate(request.samples):
+            row: Dict[str, Any] = {
+                "study_id": cell.study_id,
+                "cell_id": cell.cell_id(),
+                "phase": phase,
+                "mode": cell.mode,
+                "geometry_id": cell.geometry_id,
+                "regime_id": cell.regime_id,
+                "active_sources": list(cell.active_source_blocks),
+                "qoi": qoi,
+                "model_id": request.model_id,
+                "fidelity": request.fidelity,
+                "hf_model_id": cell.hf_model_id,
+                "lf_model_id": cell.lf_model_id,
+                "pilot_size": cell.pilot_size,
+                "budget": cell.budget,
+                "repetition": cell.repetition,
+                "seed": request.seed,
+                "sample_id": request.sample_ids[idx] if idx < len(request.sample_ids) else "",
+                "sample_index": idx,
+                "sample_fingerprint": sample_hashes[idx],
+                "request_fingerprint": request_hashes[idx],
+                "geometry_characteristic_length": request.geometry.characteristic_length,
+            }
+            for name, value in sample.items():
+                if isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, bool):
+                    row[f"input__{name}"] = float(value) if np.isfinite(value) else ""
+            for name, value in geometry_metadata.items():
+                if isinstance(value, (int, float, np.integer, np.floating)) and not isinstance(value, bool):
+                    row[f"geometry__{name}"] = float(value) if np.isfinite(value) else ""
+            input_rows.append(row)
+    store.append_sample_inputs(input_rows)
 
 
 def run_campaign(

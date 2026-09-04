@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "similarity": {
+    "linear_scale": 0.1,
+    "density_scale": 10.0,
+    "basis": "Kn_scaled/Kn_reference = 1/(density_scale*linear_scale)"
+  },
+  "adapter": {
+    "model_id": "PICLas_DSMC",
+    "fidelity": "hf",
+    "available_qois": ["C_D", "C_L", "C_Y", "C_Mx", "C_My", "C_Mz"],
+    "kwargs": {
+      "simulator_module": "PICLas",
+      "piclas_dir": "piclas",
+      "update_dir": "update_parameter_file",
+      "update_script": "python update_parameter.py",
+      "piclas_mode": "dsmc",
+      "mpi_procs": 128,
+      "submission_group_size": 1,
+      "payload_defaults": {
+        "density_scale": 10.0
+      }
+    }
+  },
+  "request": {
+    "study_id": "vleo_cylinder_hex_similarity_smoke",
+    "cell_id": "scale_0p1_dsmc_smoke",
+    "qois": ["C_D", "C_L", "C_Mz"],
+    "seed": 20260811,
+    "geometry": {
+      "id": "cylinder_hex_scale_0p1",
+      "name": "cylinder_hex_scale_0p1",
+      "characteristic_length": 0.1,
+      "geometry_class": "parametric_cylinder_hex",
+      "tags": ["generated_from_scratch", "uniform_scale_0p1"],
+      "metadata": {
+        "hf_mesh": "geometry/cylinder_hex_scale_0p1_mesh.h5",
+        "piclas_object_boundary_name": "CYLINDER_HEX",
+        "reference_area_m2": 0.001513558965734707
+      }
+    },
+    "regime": {
+      "id": "vleo_250km",
+      "label": "VLEO 250 km",
+      "descriptors": {
+        "altitude_km": 250.0
+      }
+    },
+    "active_source_blocks": ["environment"],
+    "sample_ids": ["dsmc-smoke-000"],
+    "samples": [
+      {
+        "database_index": 0,
+        "aos_deg": 0.0,
+        "aoa_deg": 0.0
+      }
+    ],
+    "metadata": {
+      "environment_model": "csv",
+      "flow_zero_direction": [1.0, 0.0, 0.0],
+      "aos_deg": 0.0,
+      "aoa_deg": 0.0,
+      "case_name": "cylinder_hex_scale_0p1_dsmc_smoke"
+    }
+  }
+}
