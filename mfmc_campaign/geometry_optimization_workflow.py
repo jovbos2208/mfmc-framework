@@ -23,6 +23,7 @@ from .parametric_geometry import CylinderHexSpec
 
 PRANDTL_MPI_PROCESSES = 36
 PRANDTL_PICLAS_MODULE = "PICLas_prandtl"
+PRANDTL_ADBSAT_MODULE = "ADBSat_prandtl"
 
 
 def _now() -> str:
@@ -353,6 +354,7 @@ def prepare_iteration(state_path_value: str | Path) -> Dict[str, Any]:
     lf_config = json.loads(Path(config["lf_config"]).resolve().read_text(encoding="utf-8"))
     lf_config["design_manifest"] = str(Path(design_manifest).resolve())
     lf_config["study_id"] = f"{state['study_id']}_iteration_{int(iteration['iteration']):03d}_sentman"
+    lf_config["simulator_module"] = PRANDTL_ADBSAT_MODULE
     lf_config_path = root / "sentman_config.json"
     lf_config_path.write_text(json.dumps(lf_config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     iteration["artifacts"]["sentman_config"] = str(lf_config_path)
@@ -368,7 +370,12 @@ def run_iteration_sentman(state_path_value: str | Path, *, execute: bool) -> Dic
     if not config_path:
         raise ValueError("Prepare the iteration before running Sentman")
     output = Path(state["config"]["output_root"]).resolve() / f"iteration_{iteration['iteration']:02d}" / "sentman"
-    result = run_lf_campaign(config_path, output, execute=execute)
+    result = run_lf_campaign(
+        config_path,
+        output,
+        execute=execute,
+        simulator_module=PRANDTL_ADBSAT_MODULE,
+    )
     if execute:
         iteration["artifacts"]["sentman_results"] = result["results_csv"]
         iteration["artifacts"]["sentman_metrics"] = result["metrics_csv"]

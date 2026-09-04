@@ -125,7 +125,13 @@ def lf_campaign_preflight(config: Mapping[str, Any]) -> Dict[str, Any]:
     return {"ready": all(checks.values()), "checks": checks, "n_samples": len(config.get("samples", []))}
 
 
-def run_lf_campaign(config_path: str | Path, output_dir: str | Path, *, execute: bool) -> Dict[str, Any]:
+def run_lf_campaign(
+    config_path: str | Path,
+    output_dir: str | Path,
+    *,
+    execute: bool,
+    simulator_module: str | None = None,
+) -> Dict[str, Any]:
     config = json.loads(Path(config_path).resolve().read_text(encoding="utf-8"))
     design_path = Path(config["design_manifest"]).resolve()
     design = json.loads(design_path.read_text(encoding="utf-8"))
@@ -136,9 +142,14 @@ def run_lf_campaign(config_path: str | Path, output_dir: str | Path, *, execute:
     if not execute:
         return {"status": "dry_run", "output_dir": str(target), "n_geometries": design["n_designs"], **report}
     runtime = Path(config["adbsat_runtime_dir"]).resolve()
+    selected_simulator_module = str(
+        simulator_module or config.get("simulator_module", "ADBSat")
+    ).strip()
+    if not selected_simulator_module:
+        raise ValueError("ADBSat simulator_module must be non-empty")
     adapter = LegacyADBSatAdapter(
         "Sentman", str(config["method"]), list(config["qois"]),
-        {"simulator_module": "ADBSat", "base_dir": str(runtime)},
+        {"simulator_module": selected_simulator_module, "base_dir": str(runtime)},
     )
     state_path = target / "lf_campaign_state.json"
     state = json.loads(state_path.read_text()) if state_path.is_file() else {"schema_version": 1, "completed": []}

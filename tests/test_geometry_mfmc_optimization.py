@@ -449,3 +449,4 @@ def test_workflow_accepts_exact_twenty_run_control_node_mode(tmp_path: Path) -> 
     sentman_config = Path(prepared["iterations"]["01"]["artifacts"]["sentman_config"])
     sentman = json.loads(sentman_config.read_text())
     assert sentman["design_manifest"] == refined["output_json"]
+    assert sentman["simulator_module"] == "ADBSat_prandtl"
