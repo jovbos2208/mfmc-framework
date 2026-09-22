@@ -96,6 +96,76 @@ def _optional_str(value: Any) -> str:
     return "" if value is None or value == "" else str(value)
 
 
+def _attitude_axis_values(spec: Any, axis_name: str) -> List[float]:
+    if isinstance(spec, list):
+        if not spec:
+            raise ConfigValidationError(f"study.attitude_grid.{axis_name} must not be empty")
+        return [float(value) for value in spec]
+    if not isinstance(spec, dict):
+        raise ConfigValidationError(
+            f"study.attitude_grid.{axis_name} must be a list or a start/stop/step mapping"
+        )
+
+    try:
+        start = float(spec["start"])
+        stop = float(spec["stop"])
+        step = float(spec["step"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ConfigValidationError(
+            f"study.attitude_grid.{axis_name} requires numeric start, stop and step"
+        ) from exc
+    if step == 0.0 or (stop - start) * step < 0.0:
+        raise ConfigValidationError(
+            f"study.attitude_grid.{axis_name}.step must advance from start toward stop"
+        )
+
+    count = int(np.floor((stop - start) / step + 1.0e-10)) + 1
+    values = [float(start + index * step) for index in range(max(0, count))]
+    if not values or not np.isclose(values[-1], stop, atol=1.0e-10, rtol=0.0):
+        raise ConfigValidationError(
+            f"study.attitude_grid.{axis_name} does not land exactly on stop"
+        )
+    values[-1] = stop
+    return values
+
+
+def _angle_token(value: float) -> str:
+    sign = "P" if value >= 0.0 else "M"
+    magnitude = abs(float(value))
+    if np.isclose(magnitude, round(magnitude), atol=1.0e-10, rtol=0.0):
+        return f"{sign}{int(round(magnitude)):03d}"
+    return f"{sign}{magnitude:.6f}".replace(".", "P").rstrip("0")
+
+
+def _expand_attitude_grid(config: Dict[str, Any]) -> None:
+    grid = config.get("study", {}).get("attitude_grid")
+    if not isinstance(grid, dict) or not bool(grid.get("enabled", True)):
+        return
+
+    aos_values = _attitude_axis_values(grid.get("aos_deg"), "aos_deg")
+    aoa_values = _attitude_axis_values(grid.get("aoa_deg"), "aoa_deg")
+    base_regimes = config.get("regimes", [])
+    if not base_regimes:
+        raise ConfigValidationError("study.attitude_grid requires at least one base regime")
+
+    expanded: List[Dict[str, Any]] = []
+    for base in base_regimes:
+        if not isinstance(base, dict):
+            raise ConfigValidationError("study.attitude_grid base regimes must be mappings")
+        base_id = str(base.get("id", base.get("label", "regime")))
+        base_label = str(base.get("label", base_id))
+        for aos_deg in aos_values:
+            for aoa_deg in aoa_values:
+                regime = deepcopy(base)
+                regime["id"] = f"{base_id}_AOS_{_angle_token(aos_deg)}_AOA_{_angle_token(aoa_deg)}"
+                regime["label"] = f"{base_label}; AoS={aos_deg:g} deg; AoA={aoa_deg:g} deg"
+                descriptors = regime.setdefault("descriptors", {})
+                descriptors["aos_deg"] = float(aos_deg)
+                descriptors["aoa_deg"] = float(aoa_deg)
+                expanded.append(regime)
+    config["regimes"] = expanded
+
+
 def _mean_hf_cost_from_model_evaluations(config: Dict[str, Any], spec: Dict[str, Any]) -> float:
     path = _optional_str(spec.get("path", spec.get("model_evaluations_csv", "")))
     if not path:
@@ -228,6 +298,8 @@ def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(cfg["execution"].get("environment"), dict):
         cfg["execution"]["environment"] = {}
     cfg["execution"]["environment"].setdefault("model", "csv")
+
+    _expand_attitude_grid(cfg)
 
     # Helper map used by study selection and validation.
     label_map = build_regime_label_map(cfg.get("regimes", []))

@@ -85,6 +85,24 @@ class TestConfigValidation(unittest.TestCase):
         errors, _ = validate_config(cfg)
         self.assertTrue(any("exactly 2" in e.message for e in errors))
 
+    def test_attitude_grid_expands_to_cartesian_regimes(self):
+        raw = base_config()
+        raw["study"]["attitude_grid"] = {
+            "aos_deg": {"start": -5, "stop": 5, "step": 5},
+            "aoa_deg": [-10, 0, 10],
+        }
+        cfg = normalize_config(raw)
+
+        self.assertEqual(9, len(cfg["regimes"]))
+        angle_pairs = {
+            (regime["descriptors"]["aos_deg"], regime["descriptors"]["aoa_deg"])
+            for regime in cfg["regimes"]
+        }
+        self.assertIn((-5.0, -10.0), angle_pairs)
+        self.assertIn((0.0, 0.0), angle_pairs)
+        self.assertIn((5.0, 10.0), angle_pairs)
+        self.assertEqual(18, len(cfg["regime_label_map"]))
+
 
 if __name__ == "__main__":
     unittest.main()

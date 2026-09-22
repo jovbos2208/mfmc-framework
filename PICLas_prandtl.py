@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import shlex
 import json
+import sys
 import uuid
 import numpy as np
 import meshio
@@ -26,6 +27,13 @@ PROJECT_NAME_ALIASES = {
     "GOCE": "GOCE",
     "CHAMP": "CHAMP",
 }
+
+
+def _resolve_update_command(update_script):
+    command = shlex.split(str(update_script))
+    if command and command[0] in {"python", "python3"}:
+        command[0] = sys.executable
+    return command
 
 
 def _canonical_geometry_key(value) -> str:
@@ -437,7 +445,7 @@ class PiclasSimulator:
                  calc_quality_factors=None,
                  flow_zero_direction=None,
                  required_surface_state_files=None,
-                 node_cores=64,
+                 node_cores=36,
                  submission_group_size=10,
                  submit_sleep_s=0.0):
         self.update_script = update_script
@@ -549,7 +557,12 @@ class PiclasSimulator:
         subdir_name = self._make_job_subdir_name(db_index=db_index, aos=AoS, geometry_id=geometry_id)
         job_subdir = os.path.join(self.piclas_dir, subdir_name)
         os.makedirs(job_subdir, exist_ok=True)
-        update_cmd = shlex.split(self.update_script) + [str(altitude), str(AoS), str(db_index), str(self.ini_high)]
+        update_cmd = _resolve_update_command(self.update_script) + [
+            str(altitude),
+            str(AoS),
+            str(db_index),
+            str(self.ini_high),
+        ]
         if random_seed is not None:
             update_cmd.extend(["--random-seed", str(int(random_seed))])
         debug_paths = self._geometry_debug_paths(job_subdir) if self.debug_geometry else None
@@ -623,7 +636,6 @@ class PiclasSimulator:
             "#SBATCH --nodes=1",
             f"#SBATCH --ntasks-per-node={self.mpi_procs}",
             "#SBATCH --time=01:00:00",
-            "#SBATCH --partition=prandtl",
             "#SBATCH --output=piclas_slurm-%j.out",
             "#SBATCH --error=piclas_slurm-%j.err",
             "",
@@ -664,8 +676,7 @@ class PiclasSimulator:
             "#SBATCH --job-name=piclas_group",
             "#SBATCH --nodes=1",
             f"#SBATCH --ntasks-per-node={requested_tasks}",
-            "#SBATCH --time=01:00:00",
-            "#SBATCH --partition=prandtl",
+            "#SBATCH --time=02:00:00",
             "#SBATCH --output=piclas_group-%j.out",
             "#SBATCH --error=piclas_group-%j.err",
             "",
@@ -831,7 +842,6 @@ class PiclasSimulator:
             f"#SBATCH --ntasks={self.node_cores}",
             f"#SBATCH --cpus-per-task=1",
             "#SBATCH --time=00:30:00",
-            "#SBATCH --partition=prandtl",
             "#SBATCH --output=piclas_postproc-%j.out",
             "#SBATCH --error=piclas_postproc-%j.err",
             "",
@@ -839,7 +849,7 @@ class PiclasSimulator:
             "module load openmpi",
             "module load hdf5",
             "",
-            "MAX_PARALLEL=${SLURM_NTASKS:-64}",
+            "MAX_PARALLEL=${SLURM_NTASKS:-36}",
             "running=0",
             "postprocess_case() {",
             "  local case_dir=\"$1\"",
@@ -895,22 +905,17 @@ class PiclasSimulator:
     def collect_results(self, job_subdirs):
         """
         Liefert für jedes Unterverzeichnis
-            • globalen Gesamt-C_D  (Bezug A_ref = windprojizierte Fläche)
+            • globalen mittleren Druck P_D in Pa (Bezug A_ref)
             • CPU-Stunden
         -------------------------------------------------------------------------
         Rückgabe
         --------
-        global_cd_list  : list[float]   # Gesamt-C_D (pro Job)
+        global_pressure_list : list[float]   # mittlerer Druck P_D [Pa] (pro Job)
         cpu_hours_list  : list[float]   # Laufzeit in Stunden (pro Job)
         """
-        aw_cd_list, global_cd_list, cpu_hours_list = [], [], []
+        global_pressure_list, cpu_hours_list = [], []
 
         for subdir in job_subdirs:
-            # ---------------------------------------------------------------------
-            # Dynamischer Druck
-            # ---------------------------------------------------------------------
-            dyn_p = float(np.loadtxt(os.path.join(subdir, "dyn_p.txt")))
-
             # ---------------------------------------------------------------------
             # Zellflächen & Referenzfläche einmal aus *einem* VTU einlesen
             # (wir nehmen das erste verfügbare VTU)
@@ -925,7 +930,7 @@ class PiclasSimulator:
             A_ref = A_total
 
             # Listen für die einzelnen Zeitschritte
-            aw_cds, global_cds = [], []
+            pressures = []
 
             result_files = output_files[1:] if len(output_files) > 1 else output_files
             for fpath in result_files:
@@ -950,24 +955,10 @@ class PiclasSimulator:
                 if cell_force.size != areas.size:
                     raise ValueError(f"Zellzahl passt nicht zu Flächen in {fpath}")
 
-                # --------------------------------------------------------------
-                # 1) Fläche-gewichtetes Mittel-C_D
-                #    \bar{C_D} =  Σ (f_i * A_i) / (q * A_total_projected)
-                # --------------------------------------------------------------
-                aw_cd = np.sum(cell_force * areas) / (dyn_p * A_total)
-
-                # --------------------------------------------------------------
-                # 2) Gesamt-C_D   (Referenzfläche A_ref)
-                #    C_D = Σ (f_i * A_i) / (q * A_ref_projected)
-                # --------------------------------------------------------------
-                global_cd = np.sum(cell_force * areas) / (dyn_p * A_ref)
-
-                aw_cds.append(aw_cd)
-                global_cds.append(global_cd)
+                pressures.append(float(np.sum(cell_force * areas) / A_ref))
 
             # Mittel über alle Zeitschritte dieses Jobs
-            aw_cd_list.append(float(np.mean(aw_cds)))
-            global_cd_list.append(float(np.mean(global_cds)))
+            global_pressure_list.append(float(np.mean(pressures)))
 
             # -----------------------------------------------------------------                                                                                                                     
             # CPU-Zeit (ms) → h
@@ -976,21 +967,23 @@ class PiclasSimulator:
                 cpu_time_ms = float(f.read().strip())
             cpu_hours_list.append(cpu_time_ms * self.mpi_procs / 3_600_000.0)
 
-        return global_cd_list, cpu_hours_list
+        return global_pressure_list, cpu_hours_list
 
     def collect_results_qois(self, job_subdirs, AoS, AoA=0.0, flow_zero_direction=None):
         """
-        Collect drag, lift, side-force, and moment coefficients (if vector force data is available).
-        Always returns C_D; C_L/C_Y/C_M* may be NaN for scalar-only solver output.
+        Collect drag, lift, side-force, and moment pressures in Pa.
+        P_L/P_Y/P_M* may be NaN for scalar-only solver output.
         """
         qoi_values = {
-            "C_D": [],
-            "C_D2": [],
-            "C_L": [],
-            "C_Y": [],
-            "C_Mx": [],
-            "C_My": [],
-            "C_Mz": [],
+            "P_D": [],
+            "P_D2": [],
+            "P_L": [],
+            "P_L2": [],
+            "P_Y": [],
+            "P_Y2": [],
+            "P_Mx": [],
+            "P_My": [],
+            "P_Mz": [],
         }
         cpu_hours_list = []
         aos_values = _expand_values(AoS, len(job_subdirs), 0.0)
@@ -999,7 +992,6 @@ class PiclasSimulator:
         for idx, subdir in enumerate(job_subdirs):
             active_zero = flow_zero_direction if flow_zero_direction is not None else self.flow_zero_direction
             flow_dir, side_dir, lift_dir = _force_frame_axes(float(aos_values[idx]), float(aoa_values[idx]), active_zero)
-            dyn_p = float(np.loadtxt(os.path.join(subdir, "dyn_p.txt")))
             output_files = self._output_vtu_files(subdir)
             if not output_files:
                 raise FileNotFoundError(f"Keine output*.vtu Dateien gefunden in {subdir}")
@@ -1010,8 +1002,8 @@ class PiclasSimulator:
             # the wind-projected reference area.
             L_ref = float(np.sqrt(max(A_wetted, 1e-12)))
 
-            cds, cls, cys = [], [], []
-            cmx_list, cmy_list, cmz_list = [], [], []
+            drag_pressures, lift_pressures, side_pressures = [], [], []
+            moment_pressures_x, moment_pressures_y, moment_pressures_z = [], [], []
 
             result_files = output_files[1:] if len(output_files) > 1 else output_files
             for fpath in result_files:
@@ -1023,47 +1015,48 @@ class PiclasSimulator:
                 # Scalar force fallback: drag-only.
                 if force_pa.shape[1] == 1:
                     scalar_f = force_pa[:, 0]
-                    # Keep legacy drag behavior for scalar-only solver output.
-                    drag = float(abs(np.sum(scalar_f * areas) / (dyn_p * A_ref)))
-                    lift = float("nan")
-                    side_force = float("nan")
-                    cm_vec = np.array([float("nan"), float("nan"), float("nan")])
+                    drag_pressure = float(abs(np.sum(scalar_f * areas) / A_ref))
+                    lift_pressure = float("nan")
+                    side_pressure = float("nan")
+                    moment_pressure_vec = np.array([float("nan"), float("nan"), float("nan")])
                 else:
                     # Vector force integration.
                     force_vec = force_pa[:, :3]
                     total_force = np.sum(force_vec * areas.reshape(-1, 1), axis=0)
-                    c_vec = total_force / (dyn_p * A_ref)
+                    pressure_vec = total_force / A_ref
 
                     # Drag is opposite freestream; lift along lift axis.
-                    drag = float(abs(-np.dot(c_vec, flow_dir)))
-                    lift = float(np.dot(c_vec, lift_dir))
-                    side_force = float(np.dot(c_vec, side_dir))
+                    drag_pressure = float(abs(-np.dot(pressure_vec, flow_dir)))
+                    lift_pressure = float(np.dot(pressure_vec, lift_dir))
+                    side_pressure = float(np.dot(pressure_vec, side_dir))
 
                     centers = mesh.cell_centers().points
                     moments = np.sum(np.cross(centers, force_vec * areas.reshape(-1, 1)), axis=0)
-                    cm_vec = moments / (dyn_p * A_ref * L_ref)
+                    moment_pressure_vec = moments / (A_ref * L_ref)
 
-                cds.append(drag)
-                cls.append(lift)
-                cys.append(side_force)
-                cmx_list.append(float(cm_vec[0]))
-                cmy_list.append(float(cm_vec[1]))
-                cmz_list.append(float(cm_vec[2]))
+                drag_pressures.append(drag_pressure)
+                lift_pressures.append(lift_pressure)
+                side_pressures.append(side_pressure)
+                moment_pressures_x.append(float(moment_pressure_vec[0]))
+                moment_pressures_y.append(float(moment_pressure_vec[1]))
+                moment_pressures_z.append(float(moment_pressure_vec[2]))
 
-            cd_mean = float(np.mean(cds))
-            cl_mean = float(np.mean(cls))
-            cy_mean = float(np.mean(cys))
-            cmx_mean = float(np.mean(cmx_list))
-            cmy_mean = float(np.mean(cmy_list))
-            cmz_mean = float(np.mean(cmz_list))
+            pd_mean = float(np.mean(drag_pressures))
+            pl_mean = float(np.mean(lift_pressures))
+            py_mean = float(np.mean(side_pressures))
+            pmx_mean = float(np.mean(moment_pressures_x))
+            pmy_mean = float(np.mean(moment_pressures_y))
+            pmz_mean = float(np.mean(moment_pressures_z))
 
-            qoi_values["C_D"].append(cd_mean)
-            qoi_values["C_D2"].append(cd_mean * cd_mean if np.isfinite(cd_mean) else float("nan"))
-            qoi_values["C_L"].append(cl_mean)
-            qoi_values["C_Y"].append(cy_mean)
-            qoi_values["C_Mx"].append(cmx_mean)
-            qoi_values["C_My"].append(cmy_mean)
-            qoi_values["C_Mz"].append(cmz_mean)
+            qoi_values["P_D"].append(pd_mean)
+            qoi_values["P_D2"].append(pd_mean * pd_mean if np.isfinite(pd_mean) else float("nan"))
+            qoi_values["P_L"].append(pl_mean)
+            qoi_values["P_L2"].append(pl_mean * pl_mean if np.isfinite(pl_mean) else float("nan"))
+            qoi_values["P_Y"].append(py_mean)
+            qoi_values["P_Y2"].append(py_mean * py_mean if np.isfinite(py_mean) else float("nan"))
+            qoi_values["P_Mx"].append(pmx_mean)
+            qoi_values["P_My"].append(pmy_mean)
+            qoi_values["P_Mz"].append(pmz_mean)
 
             with open(os.path.join(subdir, "cpu_time.txt")) as f:
                 cpu_time_ms = float(f.read().strip())
@@ -1183,8 +1176,8 @@ class PiclasSimulator:
             qoi_values = {q: qoi_values.get(q, [float("nan")] * len(job_subdirs)) for q in requested}
             return qoi_values, np.array(cpu_hours_list)
 
-        mean_cd_list, cpu_hours_list = self.collect_results(job_subdirs)
-        return np.array(mean_cd_list), np.array(cpu_hours_list)
+        mean_pressure_list, cpu_hours_list = self.collect_results(job_subdirs)
+        return np.array(mean_pressure_list), np.array(cpu_hours_list)
 
     def complete_batch(self, batch_handle, random_seed, requested_qois=None):
         self.wait_for_batch_jobs(batch_handle, max_retries=2)
@@ -1217,8 +1210,8 @@ class PiclasSimulator:
             geometry_mesh=geometry_mesh,
             flow_zero_direction=flow_zero_direction,
         )
-        mean_cd_list, cpu_hours_list = self.complete_batch(batch_handle, random_seed)
-        return mean_cd_list, cpu_hours_list
+        mean_pressure_list, cpu_hours_list = self.complete_batch(batch_handle, random_seed)
+        return mean_pressure_list, cpu_hours_list
 
     def run_batch_qois(
         self,

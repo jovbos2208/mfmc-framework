@@ -5,6 +5,44 @@ import time
 import subprocess
 import numpy as np
 
+
+PRESSURE_QOIS = ("P_D", "P_L", "P_Y", "P_Mx", "P_My", "P_Mz")
+
+
+def _pressure_result_row(header_tokens, parts):
+    """Parse one ADBSat row and return area-normalized loads in Pa."""
+    columns = {name: pos for pos, name in enumerate(header_tokens)}
+
+    def _column(name, default=float("nan")):
+        pos = columns.get(name)
+        if pos is None or pos >= len(parts):
+            return default
+        try:
+            return float(parts[pos])
+        except (TypeError, ValueError):
+            return default
+
+    pressure_values = {name: _column(name) for name in PRESSURE_QOIS}
+    if not np.isfinite(pressure_values["P_D"]):
+        q_inf = _column("q_inf")
+        if not np.isfinite(q_inf) or q_inf <= 0.0:
+            raise ValueError(
+                "ADBSat result row contains aerodynamic coefficients but no positive q_inf; "
+                "pressure in Pa cannot be reconstructed. Re-run the simulation with the pressure output format."
+            )
+        coefficient_names = ("C_D", "C_L", "C_Y", "C_Mx", "C_My", "C_Mz")
+        pressure_values = {
+            pressure_name: _column(coefficient_name) * q_inf
+            for pressure_name, coefficient_name in zip(PRESSURE_QOIS, coefficient_names)
+        }
+
+    pressure_values["P_D2"] = pressure_values["P_D"] ** 2
+    pressure_values["P_L2"] = pressure_values["P_L"] ** 2
+    pressure_values["P_Y2"] = pressure_values["P_Y"] ** 2
+    cpu_time_ms = _column("cpu_time_ms")
+    return pressure_values, cpu_time_ms
+
+
 class ADBSatSimulator:
     def __init__(self, method, simulation_script=None, base_dir='ADBSat-PyVersion',
                  job_template="job_adbsat.sh", cpus_per_task=36):
@@ -84,7 +122,7 @@ class ADBSatSimulator:
 
     def analyze_simulation_results(self, indices):
         """
-        Liest `all_results.txt` und gibt Fd-Werte und CPU-Zeiten zurück.
+        Liest `all_results.txt` und gibt P_D [Pa] und CPU-Zeiten zurück.
         """
         result_file = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}", "all_results.txt")
         if not os.path.exists(result_file):
@@ -97,7 +135,9 @@ class ADBSatSimulator:
         indices_set = set(map(str, indices))
 
         with open(result_file, "r") as f:
-            lines = f.readlines()[1:]  # Skip header
+            all_lines = f.readlines()
+        header_tokens = all_lines[0].strip().split() if all_lines else []
+        lines = all_lines[1:]
 
         for line in lines:
             parts = line.strip().split()
@@ -109,37 +149,24 @@ class ADBSatSimulator:
             if gsi_model != self.method or idx not in indices_set:
                 continue
 
-            # Backward compatibility:
-            # Old format: gsi_model idx Cd cpu_time_ms
-            # New formats:
-            #   gsi_model idx C_D C_L C_Mx C_My C_Mz cpu_time_ms
-            #   gsi_model idx C_D C_L C_Y C_Mx C_My C_Mz cpu_time_ms
-            if len(parts) >= 9:
-                cd = parts[2]
-                cpu_time = parts[8]
-            elif len(parts) >= 8:
-                cd = parts[2]
-                cpu_time = parts[7]
-            else:
-                cd = parts[2]
-                cpu_time = parts[3]
+            qoi_map, cpu_time = _pressure_result_row(header_tokens, parts)
 
             idx_array.append(int(float(idx)))
-            Fd_values.append(float(cd))
+            Fd_values.append(float(qoi_map["P_D"]))
             cpu_times.append(float(cpu_time) / 3600000.0)  # ms → h
 
         return np.array(Fd_values), np.array(cpu_times), np.array(idx_array)
 
     def analyze_simulation_results_qois(self, indices, requested_qois=None):
         """
-        Read all_results.txt and return requested QoIs with costs and indices.
+        Read all_results.txt and return requested pressure QoIs in Pa.
         Returns:
             values_by_qoi: dict[str, np.ndarray]
             cpu_times_h: np.ndarray
             idx_array: np.ndarray
         """
         if requested_qois is None:
-            requested_qois = ["C_D"]
+            requested_qois = ["P_D"]
 
         result_file = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}", "all_results.txt")
         if not os.path.exists(result_file):
@@ -151,7 +178,9 @@ class ADBSatSimulator:
         indices_set = set(map(str, indices))
 
         with open(result_file, "r") as f:
-            lines = f.readlines()[1:]  # Skip header
+            all_lines = f.readlines()
+        header_tokens = all_lines[0].strip().split() if all_lines else []
+        lines = all_lines[1:]
 
         for line in lines:
             parts = line.strip().split()
@@ -163,35 +192,7 @@ class ADBSatSimulator:
             if gsi_model != self.method or idx not in indices_set:
                 continue
 
-            qoi_map = {
-                "C_D": float("nan"),
-                "C_D2": float("nan"),
-                "C_L": float("nan"),
-                "C_Y": float("nan"),
-                "C_Mx": float("nan"),
-                "C_My": float("nan"),
-                "C_Mz": float("nan"),
-            }
-
-            if len(parts) >= 9:
-                qoi_map["C_D"] = float(parts[2])
-                qoi_map["C_L"] = float(parts[3])
-                qoi_map["C_Y"] = float(parts[4])
-                qoi_map["C_Mx"] = float(parts[5])
-                qoi_map["C_My"] = float(parts[6])
-                qoi_map["C_Mz"] = float(parts[7])
-                cpu_time = float(parts[8])
-            elif len(parts) >= 8:
-                qoi_map["C_D"] = float(parts[2])
-                qoi_map["C_L"] = float(parts[3])
-                qoi_map["C_Mx"] = float(parts[4])
-                qoi_map["C_My"] = float(parts[5])
-                qoi_map["C_Mz"] = float(parts[6])
-                cpu_time = float(parts[7])
-            else:
-                qoi_map["C_D"] = float(parts[2])
-                cpu_time = float(parts[3])
-            qoi_map["C_D2"] = qoi_map["C_D"] * qoi_map["C_D"] if np.isfinite(qoi_map["C_D"]) else float("nan")
+            qoi_map, cpu_time = _pressure_result_row(header_tokens, parts)
 
             idx_array.append(int(float(idx)))
             cpu_times.append(cpu_time / 3600000.0)

@@ -1,0 +1,153 @@
+# One paired pilot at AoS=AoA=0 deg. The production campaign reuses its
+# TPMC/ADBSat values, correlations, beta coefficients and measured costs.
+
+study:
+  id: specpractopt_cylinder_hex_gsi_pilot
+  mode: mixed_uncertainty
+  active_source_blocks:
+    - gsi.energy_accommodation
+    - gsi.cll_parameters
+    - gsi.surface_temperature
+  mixed_source_blocks:
+    - - gsi.energy_accommodation
+      - gsi.cll_parameters
+      - gsi.surface_temperature
+
+sources:
+  blocks:
+    - {name: gsi.energy_accommodation}
+    - {name: gsi.cll_parameters}
+    - {name: gsi.surface_temperature}
+
+geometries:
+  - id: SpecPractOpt_cylinder_hex
+    name: SpecPractOpt cylinder hex
+    characteristic_length: 0.35902899
+    geometry_class: cylinder
+    metadata:
+      hf_mesh: SpecPractOpt_cylinder_hex_mesh.h5
+      lf_model: SpecPractOpt_cylinder_hex
+      reference_area_m2: 0.2054622883746301
+      reference_area_source: piclas_h5_OBJ_half_total_surface
+
+regimes:
+  - id: AO_1E15_FIXED
+    label: Fixed pure atomic oxygen at 1e15 particles per cubic metre
+    descriptors:
+      altitude_km: 313.0
+      characteristic_length: 0.35902899
+      knudsen_number: 3784.57
+      speed_ratio: 7.72286
+      freestream_temperature: 961.0
+      composition_descriptor: O=1.0,N2=0.0,O2=0.0,He=0.0
+      solar_activity_state: fixed
+      geomagnetic_activity_state: fixed
+      wind_state: zero
+      geometry_class: cylinder
+      surface_state: nominal
+      density_kg_m3: 2.65669645265334e-11
+      number_density_m3: 1.0e+15
+      relative_speed_mps: 7718.371
+      aos_deg: 0.0
+      aoa_deg: 0.0
+
+variables:
+  - name: trans_accommodation
+    source_block: gsi.energy_accommodation
+    distribution: {kind: uniform, params: {low: 0.70, high: 1.00}}
+    baseline: 0.892414
+    bounds: [0.70, 1.00]
+  - name: momentum_accommodation
+    source_block: gsi.cll_parameters
+    distribution: {kind: uniform, params: {low: 0.50, high: 1.00}}
+    baseline: 0.796403
+    bounds: [0.50, 1.00]
+  - name: wall_temperature_k
+    source_block: gsi.surface_temperature
+    distribution: {kind: uniform, params: {low: 250.0, high: 400.0}}
+    baseline: 286.036
+    bounds: [250.0, 400.0]
+
+sampling:
+  method: independent
+  sample_count: 50
+  max_production_samples: 50
+
+models:
+  hf:
+    id: PICLas_TPMC
+    kind: legacy_piclas
+    kwargs:
+      simulator_module: PICLas_prandtl
+      mpi_procs: 64
+      piclas_mode: tpmc
+      collision_mode: 0
+      calc_quality_factors: false
+      payload_defaults:
+        t_end_s: 1.0e-4
+        manual_timestep_s: 1.0e-7
+        sampling_iterations: 250
+  lf:
+    - id: ADBSat_PICLasMaxwell
+      kind: legacy_adbsat
+      method: PICLasMaxwell
+      kwargs:
+        simulator_module: ADBSat_prandtl
+        base_dir: ADBSat-PyVersion
+  available_qois:
+    PICLas_TPMC: [C_D, C_D2]
+    ADBSat_PICLasMaxwell: [C_D, C_D2]
+
+qois:
+  direct: [C_D]
+  derived: []
+  batch_cd_cd2: false
+
+pilot:
+  size: 50
+  sizes: [50]
+  robustness_repetitions: 50
+  reuse_across_budgets: true
+
+# run-pilots only uses this to construct the pilot cell.
+budget:
+  total: [1.0]
+  min_hf: 1
+  hf_fraction: 0.0
+
+repetitions: 1
+seeds: {global: 20260922}
+
+outputs:
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi/pilot
+  write_parquet: false
+  write_model_evaluations: true
+  write_config_snapshot: true
+  plots: false
+
+execution:
+  backend: legacy_slurm
+  resume: false
+  aos_deg: 0.0
+  aoa_deg: 0.0
+  flow_zero_direction: [1.0, 0.0, 0.0]
+  adbsat_aos_offset_deg: 0.0
+  environment:
+    model: csv
+    # [rho, n_N2, n_O2, n_O, n_He, n_H, n_Ar, n_N, n_AO, n_NO, T]
+    atmosphere_row:
+      - 2.65669645265334e-11
+      - 0.0
+      - 0.0
+      - 1.0e+15
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 961.0
+    relative_speed_mps: 7718.371
+    wind_enu_mps: [0.0, 0.0, 0.0]
+    use_winds: false
+    apply_wind_to_speed: false

@@ -7,6 +7,43 @@ import sys
 import numpy as np
 
 
+PRESSURE_QOIS = ("P_D", "P_L", "P_Y", "P_Mx", "P_My", "P_Mz")
+
+
+def _pressure_result_row(header_tokens, parts):
+    """Parse one ADBSat row and return area-normalized loads in Pa."""
+    columns = {name: pos for pos, name in enumerate(header_tokens)}
+
+    def _column(name, default=float("nan")):
+        pos = columns.get(name)
+        if pos is None or pos >= len(parts):
+            return default
+        try:
+            return float(parts[pos])
+        except (TypeError, ValueError):
+            return default
+
+    pressure_values = {name: _column(name) for name in PRESSURE_QOIS}
+    if not np.isfinite(pressure_values["P_D"]):
+        q_inf = _column("q_inf")
+        if not np.isfinite(q_inf) or q_inf <= 0.0:
+            raise ValueError(
+                "ADBSat result row contains aerodynamic coefficients but no positive q_inf; "
+                "pressure in Pa cannot be reconstructed. Re-run the simulation with the pressure output format."
+            )
+        coefficient_names = ("C_D", "C_L", "C_Y", "C_Mx", "C_My", "C_Mz")
+        pressure_values = {
+            pressure_name: _column(coefficient_name) * q_inf
+            for pressure_name, coefficient_name in zip(PRESSURE_QOIS, coefficient_names)
+        }
+
+    pressure_values["P_D2"] = pressure_values["P_D"] ** 2
+    pressure_values["P_L2"] = pressure_values["P_L"] ** 2
+    pressure_values["P_Y2"] = pressure_values["P_Y"] ** 2
+    cpu_time_ms = _column("cpu_time_ms")
+    return pressure_values, cpu_time_ms
+
+
 def wind_projected_reference_area_from_obj(obj_file: str, flow_dir: np.ndarray, scale_to_m: float = 1.0) -> float:
     """
     Return the wind-projected reference area for an ADBSat OBJ geometry.
@@ -147,7 +184,7 @@ class ADBSatSimulator:
 
     def analyze_simulation_results(self, indices):
         """
-        Liest `all_results.txt` und gibt Fd-Werte und CPU-Zeiten zurück.
+        Liest `all_results.txt` und gibt P_D [Pa] und CPU-Zeiten zurück.
         """
         result_file = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}", "all_results.txt")
         if not os.path.exists(result_file):
@@ -160,7 +197,9 @@ class ADBSatSimulator:
         indices_set = set(map(str, indices))
 
         with open(result_file, "r") as f:
-            lines = f.readlines()[1:]  # Skip header
+            all_lines = f.readlines()
+        header_tokens = all_lines[0].strip().split() if all_lines else []
+        lines = all_lines[1:]
 
         for line in lines:
             parts = line.strip().split()
@@ -172,38 +211,30 @@ class ADBSatSimulator:
             if gsi_model != self.method or idx not in indices_set:
                 continue
 
-            # Backward compatibility:
-            # Old format: gsi_model idx Cd cpu_time_ms
-            # New format: gsi_model idx C_D C_L C_Mx C_My C_Mz cpu_time_ms
-            if len(parts) >= 8:
-                cd = parts[2]
-                cpu_time = parts[7]
-            else:
-                cd = parts[2]
-                cpu_time = parts[3]
-            cd_value = float(cd)
-            if not np.isfinite(cd_value):
+            qoi_map, cpu_time = _pressure_result_row(header_tokens, parts)
+            pressure_value = float(qoi_map["P_D"])
+            if not np.isfinite(pressure_value):
                 raise ValueError(
-                    f"Non-finite ADBSat C_D for method={self.method}, idx={idx} in {result_file}. "
+                    f"Non-finite ADBSat P_D for method={self.method}, idx={idx} in {result_file}. "
                     f"Raw line: {line.strip()}"
                 )
 
             idx_array.append(int(float(idx)))
-            Fd_values.append(cd_value)
+            Fd_values.append(pressure_value)
             cpu_times.append(float(cpu_time) / 3600000.0)  # ms → h
 
         return np.array(Fd_values), np.array(cpu_times), np.array(idx_array)
 
     def analyze_simulation_results_qois(self, indices, requested_qois=None):
         """
-        Read all_results.txt and return requested QoIs with costs and indices.
+        Read all_results.txt and return requested pressure QoIs in Pa.
         Returns:
             values_by_qoi: dict[str, np.ndarray]
             cpu_times_h: np.ndarray
             idx_array: np.ndarray
         """
         if requested_qois is None:
-            requested_qois = ["C_D"]
+            requested_qois = ["P_D"]
 
         result_file = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}", "all_results.txt")
         if not os.path.exists(result_file):
@@ -224,7 +255,6 @@ class ADBSatSimulator:
             )
 
         header_tokens = lines[0].strip().split()
-        header_map = {name: pos for pos, name in enumerate(header_tokens)}
         lines = lines[1:]  # Skip header
 
         for line in lines:
@@ -237,45 +267,7 @@ class ADBSatSimulator:
             if gsi_model != self.method or idx not in indices_set:
                 continue
 
-            qoi_map = {
-                "C_D": float("nan"),
-                "C_D2": float("nan"),
-                "C_L": float("nan"),
-                "C_L2": float("nan"),
-                "C_Y": float("nan"),
-                "C_Y2": float("nan"),
-                "C_Mx": float("nan"),
-                "C_My": float("nan"),
-                "C_Mz": float("nan"),
-            }
-
-            if len(parts) >= 8:
-                # Parse by column names when present to remain robust across output variants.
-                def _col(name, fallback_idx=None, default=float("nan")):
-                    idx = header_map.get(name, fallback_idx)
-                    if idx is None or idx >= len(parts):
-                        return default
-                    try:
-                        return float(parts[idx])
-                    except Exception:
-                        return default
-
-                qoi_map["C_D"] = _col("C_D", fallback_idx=2)
-                qoi_map["C_L"] = _col("C_L", fallback_idx=3)
-                qoi_map["C_Y"] = _col("C_Y", default=float("nan"))
-                qoi_map["C_Mx"] = _col("C_Mx", fallback_idx=4)
-                qoi_map["C_My"] = _col("C_My", fallback_idx=5)
-                qoi_map["C_Mz"] = _col("C_Mz", fallback_idx=6)
-                cpu_time = _col("cpu_time_ms", fallback_idx=7, default=float("nan"))
-            else:
-                qoi_map["C_D"] = float(parts[2])
-                cpu_time = float(parts[3])
-            qoi_map["C_D2"] = qoi_map["C_D"] * qoi_map["C_D"] if np.isfinite(qoi_map["C_D"]) else float("nan")
-            qoi_map["C_L2"] = qoi_map["C_L"] * qoi_map["C_L"] if np.isfinite(qoi_map["C_L"]) else float("nan")
-            # If legacy output has no C_Y, default to 0.0 to keep Y-channel QoIs usable.
-            if not np.isfinite(qoi_map["C_Y"]):
-                qoi_map["C_Y"] = 0.0
-            qoi_map["C_Y2"] = qoi_map["C_Y"] * qoi_map["C_Y"] if np.isfinite(qoi_map["C_Y"]) else float("nan")
+            qoi_map, cpu_time = _pressure_result_row(header_tokens, parts)
 
             bad_qois = [
                 q for q in requested_qois

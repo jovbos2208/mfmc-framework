@@ -32,8 +32,11 @@ if str(ADBSAT_PY_DIR) not in sys.path:
 if str(UPDATE_PARAMETER_DIR) not in sys.path:
     sys.path.insert(0, str(UPDATE_PARAMETER_DIR))
 
-from PICLas import PiclasSimulator, _boundary3_source_name
-from PICLas_prandtl import PiclasSimulator as PrandtlPiclasSimulator
+from PICLas import PiclasSimulator, _boundary3_source_name, _resolve_update_command
+from PICLas_prandtl import (
+    PiclasSimulator as PrandtlPiclasSimulator,
+    _resolve_update_command as _resolve_prandtl_update_command,
+)
 import update_parameter as piclas_update
 from calc.environment import environment as adbsat_environment
 
@@ -54,6 +57,12 @@ class _FakeMesh:
 
 
 class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
+    def test_piclas_update_commands_use_active_python_interpreter(self):
+        for resolver in (_resolve_update_command, _resolve_prandtl_update_command):
+            self.assertEqual(sys.executable, resolver("python update_parameter.py")[0])
+            self.assertEqual(sys.executable, resolver("python3 update_parameter.py")[0])
+            self.assertEqual("/custom/python", resolver("/custom/python update_parameter.py")[0])
+
     def test_explicit_piclas_object_boundary_overrides_legacy_obj_default(self):
         self.assertEqual(
             "CYLINDER_HEX",
@@ -528,15 +537,13 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
     def test_piclas_collect_results_qois_from_vector_force(self):
         force_per_area = np.asarray([[0.0, -1.0, 0.5], [0.0, -2.0, 1.5]], dtype=float)
         centers = np.asarray([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], dtype=float)
-        expected_drag = 1.5
-        expected_lift = 1.0
-        expected_cm = np.asarray([0.5, -0.125, -0.25], dtype=float)
+        expected_drag_pressure = 3.0
+        expected_lift_pressure = 2.0
+        expected_moment_pressure = np.asarray([1.0, -0.25, -0.5], dtype=float)
 
         with tempfile.TemporaryDirectory() as td:
             for name in ["output1.vtu", "output2.vtu", "output3.vtu", "output4.vtu"]:
                 open(os.path.join(td, name), "w", encoding="utf-8").close()
-            with open(os.path.join(td, "dyn_p.txt"), "w", encoding="utf-8") as f:
-                f.write("2.0\n")
             with open(os.path.join(td, "cpu_time.txt"), "w", encoding="utf-8") as f:
                 f.write("3600000\n")
 
@@ -546,12 +553,13 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             ):
                 qois, cpu_h = sim.collect_results_qois([td], AoS=[0.0], AoA=[0.0])
 
-        self.assertAlmostEqual(expected_drag, qois["C_D"][0], places=12)
-        self.assertAlmostEqual(expected_drag * expected_drag, qois["C_D2"][0], places=12)
-        self.assertAlmostEqual(expected_lift, qois["C_L"][0], places=12)
-        self.assertAlmostEqual(expected_cm[0], qois["C_Mx"][0], places=12)
-        self.assertAlmostEqual(expected_cm[1], qois["C_My"][0], places=12)
-        self.assertAlmostEqual(expected_cm[2], qois["C_Mz"][0], places=12)
+        self.assertNotIn("C_D", qois)
+        self.assertAlmostEqual(expected_drag_pressure, qois["P_D"][0], places=12)
+        self.assertAlmostEqual(expected_drag_pressure**2, qois["P_D2"][0], places=12)
+        self.assertAlmostEqual(expected_lift_pressure, qois["P_L"][0], places=12)
+        self.assertAlmostEqual(expected_moment_pressure[0], qois["P_Mx"][0], places=12)
+        self.assertAlmostEqual(expected_moment_pressure[1], qois["P_My"][0], places=12)
+        self.assertAlmostEqual(expected_moment_pressure[2], qois["P_Mz"][0], places=12)
         self.assertEqual([4.0], cpu_h)
 
     def test_prandtl_piclas_collect_results_qois_uses_wetted_area_for_moment_length(self):
@@ -561,8 +569,6 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             for name in ["output1.vtu", "output2.vtu"]:
                 open(os.path.join(td, name), "w", encoding="utf-8").close()
-            with open(os.path.join(td, "dyn_p.txt"), "w", encoding="utf-8") as f:
-                f.write("2.0\n")
             with open(os.path.join(td, "cpu_time.txt"), "w", encoding="utf-8") as f:
                 f.write("3600000\n")
 
@@ -577,9 +583,10 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             ):
                 qois, cpu_h = sim.collect_results_qois([td], AoS=[0.0], AoA=[0.0])
 
-        self.assertAlmostEqual(1.0, qois["C_Mx"][0], places=12)
-        self.assertAlmostEqual(-0.25, qois["C_My"][0], places=12)
-        self.assertAlmostEqual(-0.5, qois["C_Mz"][0], places=12)
+        self.assertNotIn("C_Mx", qois)
+        self.assertAlmostEqual(2.0, qois["P_Mx"][0], places=12)
+        self.assertAlmostEqual(-0.5, qois["P_My"][0], places=12)
+        self.assertAlmostEqual(-1.0, qois["P_Mz"][0], places=12)
         self.assertEqual([4.0], cpu_h)
 
     def test_prepare_simulation_folder_uses_geometry_specific_mesh_and_project(self):

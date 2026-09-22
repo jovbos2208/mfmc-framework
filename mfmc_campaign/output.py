@@ -29,6 +29,8 @@ RESULT_COLUMNS = [
     "regime_geomagnetic_activity_state",
     "regime_wind_state",
     "regime_surface_state",
+    "regime_aos_deg",
+    "regime_aoa_deg",
     "active_sources",
     "qoi",
     "quantity_kind",

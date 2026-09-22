@@ -242,18 +242,15 @@ Implemented status:
   12-geometry bundle defines the intersection, manifests record the exact sample
   IDs, and the learning-curve builder rejects mixed or inconsistent balances.
   All available TPMC samples remain available for final robust-metric estimates.
-- A two-stage fallback fits separate anisotropic Matern-5/2 Gaussian processes
-  from the four normalized geometry variables to empirical TPMC mean drag,
-  standard deviation, and 95th percentile. Nonparametric bootstrap variances
-  provide heteroskedastic observation noise, and every reported validation value
-  comes from a complete leave-one-geometry-out refit. JSON model artifacts are
-  directly reloadable without pickle.
-- `run_cylinder_hex_balanced_surrogate_comparison.py` runs the balanced PCE
-  learning curve and 12-geometry metric-GP validation without new solver jobs.
-  Its predeclared decision rule prefers the joint PCE if it meets the absolute
-  held-out target, otherwise the metric GP if all metric-specific relative-RMSE
-  targets pass; failure of both triggers geometry acquisition rather than more
-  DSMC states at already sampled geometries.
+- The balanced 12-geometry result rejects the joint geometry/uncertainty PCE for
+  optimization: the selected TPMC PCE has `RMSE = 1.3827e-4 m2`, above the
+  predeclared `1e-4 m2` target, while the DSMC correction improves RMSE by only
+  0.44%. This negative result is retained as an auditable model-selection result.
+- Robust optimization therefore uses a nested two-fidelity MFMC estimator at
+  every evaluated geometry, with PICLas TPMC as the target and Sentman as the
+  control variate. Separate first- and second-moment control weights yield drag
+  mean and standard deviation under a fixed 20-TPMC-equivalent budget. DSMC is
+  reserved for final validation of the reported designs.
 
 ### WP6 — Robust optimization and paper validation
 
@@ -272,8 +269,8 @@ statistically superior.
 
 ## Immediate Next Implementation Milestone
 
-Run the balanced offline PCE/metric-GP comparison on the completed 6-, 9-, and
-12-geometry bundles. If one model path passes its held-out target, proceed to
-WP6 optimization and reserve the six untouched geometries for the final paired
-validation. If neither passes, acquire new training geometries; do not spend the
-next budget on additional DSMC states at the existing twelve geometries.
+Implement and verify the TPMC--Sentman scalar MFMC estimator on the completed
+paired geometry bundles, then couple it to the derivative-free WP6 optimizer.
+Every objective evaluation receives the same 20-TPMC-equivalent budget and
+reports estimator uncertainty. Reserve DSMC and the six untouched geometries
+for the final paired validation rather than optimization training.

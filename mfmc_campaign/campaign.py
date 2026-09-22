@@ -437,6 +437,7 @@ def _external_pilot_result(
     source_mode: Optional[str] = None,
     lf_model_id_filter: Optional[str] = None,
     match_lf_model_id: bool = True,
+    match_regime_id: bool = True,
 ) -> Optional[EvaluationResult]:
     if not path or not os.path.exists(path):
         return None
@@ -472,7 +473,7 @@ def _external_pilot_result(
             if field(row, "geometry_id") != cell.geometry_id:
                 reject_counts["geometry_id"] += 1
                 continue
-            if field(row, "regime_id") != cell.regime_id:
+            if match_regime_id and field(row, "regime_id") != cell.regime_id:
                 reject_counts["regime_id"] += 1
                 continue
             if field(row, "hf_model_id") != cell.hf_model_id:
@@ -583,6 +584,7 @@ def _external_pilot_cost_array(
     source_mode: Optional[str] = None,
     lf_model_id_filter: Optional[str] = None,
     match_lf_model_id: bool = True,
+    match_regime_id: bool = True,
 ) -> Optional[np.ndarray]:
     if not path or not os.path.exists(path):
         return None
@@ -611,7 +613,7 @@ def _external_pilot_cost_array(
             if field(row, "geometry_id") != cell.geometry_id:
                 reject_counts["geometry_id"] += 1
                 continue
-            if field(row, "regime_id") != cell.regime_id:
+            if match_regime_id and field(row, "regime_id") != cell.regime_id:
                 reject_counts["regime_id"] += 1
                 continue
             if field(row, "hf_model_id") != cell.hf_model_id:
@@ -1255,6 +1257,8 @@ def _build_result_row(
         "regime_geomagnetic_activity_state": regime_desc.get("geomagnetic_activity_state"),
         "regime_wind_state": regime_desc.get("wind_state"),
         "regime_surface_state": regime_desc.get("surface_state"),
+        "regime_aos_deg": regime_desc.get("aos_deg"),
+        "regime_aoa_deg": regime_desc.get("aoa_deg"),
         **metrics,
     }
 
@@ -1425,6 +1429,7 @@ def run_campaign(
         print("[pilot] No external pilot model evaluations CSV configured.", flush=True)
     external_pilot_study_id = cfg.get("pilot", {}).get("source_study_id")
     external_pilot_mode = cfg.get("pilot", {}).get("source_mode")
+    match_external_pilot_regime = bool(cfg.get("pilot", {}).get("match_regime_id", True))
 
     n_executed = 0
     n_skipped = 0
@@ -1529,6 +1534,11 @@ def run_campaign(
             meta.update(env_cfg)
             if "model" in env_cfg and "environment_model" not in meta:
                 meta["environment_model"] = env_cfg.get("model")
+        regime_descriptors = regime.get("descriptors", {})
+        if isinstance(regime_descriptors, dict):
+            for key in ("aos_deg", "aoa_deg"):
+                if key in regime_descriptors:
+                    meta[key] = regime_descriptors[key]
         for key in [
             "flow_zero_direction",
             "flow_zero_direction_xyz",
@@ -1564,6 +1574,7 @@ def run_campaign(
             source_study_id=str(external_pilot_study_id) if external_pilot_study_id is not None else None,
             source_mode=str(external_pilot_mode) if external_pilot_mode is not None else None,
             match_lf_model_id=False,
+            match_regime_id=match_external_pilot_regime,
         )
 
         pilot_lf_reqs = {}
@@ -1594,6 +1605,7 @@ def run_campaign(
                 source_study_id=str(external_pilot_study_id) if external_pilot_study_id is not None else None,
                 source_mode=str(external_pilot_mode) if external_pilot_mode is not None else None,
                 lf_model_id_filter=lf_model_id,
+                match_regime_id=match_external_pilot_regime,
             )
 
         all_lf_external = all(res is not None for res in pilot_lf_results.values())
@@ -1684,6 +1696,7 @@ def run_campaign(
             source_study_id=str(external_pilot_study_id) if external_pilot_study_id is not None else None,
             source_mode=str(external_pilot_mode) if external_pilot_mode is not None else None,
             match_lf_model_id=False,
+            match_regime_id=match_external_pilot_regime,
         )
         external_pilot_lf_cost_arrays = {
             lf_model_id: _external_pilot_cost_array(
@@ -1695,6 +1708,7 @@ def run_campaign(
                 source_study_id=str(external_pilot_study_id) if external_pilot_study_id is not None else None,
                 source_mode=str(external_pilot_mode) if external_pilot_mode is not None else None,
                 lf_model_id_filter=lf_model_id,
+                match_regime_id=match_external_pilot_regime,
             )
             for lf_model_id in lf_model_ids
         }
