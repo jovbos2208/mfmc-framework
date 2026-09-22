@@ -103,6 +103,13 @@ class TestConfigValidation(unittest.TestCase):
         self.assertIn((5.0, 10.0), angle_pairs)
         self.assertEqual(18, len(cfg["regime_label_map"]))
 
+        renormalized = normalize_config(cfg)
+        self.assertEqual(9, len(renormalized["regimes"]))
+        self.assertEqual(
+            [regime["id"] for regime in cfg["regimes"]],
+            [regime["id"] for regime in renormalized["regimes"]],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,8 +24,8 @@ def _pressure_result_row(header_tokens, parts):
             return default
 
     pressure_values = {name: _column(name) for name in PRESSURE_QOIS}
+    q_inf = _column("q_inf")
     if not np.isfinite(pressure_values["P_D"]):
-        q_inf = _column("q_inf")
         if not np.isfinite(q_inf) or q_inf <= 0.0:
             raise ValueError(
                 "ADBSat result row contains aerodynamic coefficients but no positive q_inf; "
@@ -40,6 +40,20 @@ def _pressure_result_row(header_tokens, parts):
     pressure_values["P_D2"] = pressure_values["P_D"] ** 2
     pressure_values["P_L2"] = pressure_values["P_L"] ** 2
     pressure_values["P_Y2"] = pressure_values["P_Y"] ** 2
+    coefficient_values = {}
+    for pressure_name, coefficient_name in zip(
+        PRESSURE_QOIS,
+        ("C_D", "C_L", "C_Y", "C_Mx", "C_My", "C_Mz"),
+    ):
+        coefficient_values[coefficient_name] = (
+            pressure_values[pressure_name] / q_inf
+            if np.isfinite(q_inf) and q_inf > 0.0
+            else float("nan")
+        )
+    coefficient_values["C_D2"] = coefficient_values["C_D"] ** 2
+    coefficient_values["C_L2"] = coefficient_values["C_L"] ** 2
+    coefficient_values["C_Y2"] = coefficient_values["C_Y"] ** 2
+    pressure_values.update(coefficient_values)
     cpu_time_ms = _column("cpu_time_ms")
     return pressure_values, cpu_time_ms
 

@@ -546,6 +546,8 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
                 open(os.path.join(td, name), "w", encoding="utf-8").close()
             with open(os.path.join(td, "cpu_time.txt"), "w", encoding="utf-8") as f:
                 f.write("3600000\n")
+            with open(os.path.join(td, "dyn_p.txt"), "w", encoding="utf-8") as f:
+                f.write("2.0\n")
 
             sim = PiclasSimulator(mpi_procs=4)
             with patch("PICLas.cell_areas_and_total", return_value=(np.asarray([2.0, 2.0], dtype=float), 4.0)), patch(
@@ -571,6 +573,8 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
                 open(os.path.join(td, name), "w", encoding="utf-8").close()
             with open(os.path.join(td, "cpu_time.txt"), "w", encoding="utf-8") as f:
                 f.write("3600000\n")
+            with open(os.path.join(td, "dyn_p.txt"), "w", encoding="utf-8") as f:
+                f.write("2.0\n")
 
             sim = PrandtlPiclasSimulator(mpi_procs=4)
             with patch(
@@ -583,6 +587,9 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             ):
                 qois, cpu_h = sim.collect_results_qois([td], AoS=[0.0], AoA=[0.0])
 
+        self.assertAlmostEqual(qois["P_D"][0] / 2.0, qois["C_D"][0], places=12)
+        self.assertAlmostEqual(qois["P_Y"][0] / 2.0, qois["C_Y"][0], places=12)
+        self.assertAlmostEqual(qois["C_Y"][0] ** 2, qois["C_Y2"][0], places=12)
         self.assertNotIn("C_Mx", qois)
         self.assertAlmostEqual(2.0, qois["P_Mx"][0], places=12)
         self.assertAlmostEqual(-0.5, qois["P_My"][0], places=12)

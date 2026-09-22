@@ -981,6 +981,12 @@ class PiclasSimulator:
             "P_L2": [],
             "P_Y": [],
             "P_Y2": [],
+            "C_D": [],
+            "C_D2": [],
+            "C_L": [],
+            "C_L2": [],
+            "C_Y": [],
+            "C_Y2": [],
             "P_Mx": [],
             "P_My": [],
             "P_Mz": [],
@@ -1054,6 +1060,22 @@ class PiclasSimulator:
             qoi_values["P_L2"].append(pl_mean * pl_mean if np.isfinite(pl_mean) else float("nan"))
             qoi_values["P_Y"].append(py_mean)
             qoi_values["P_Y2"].append(py_mean * py_mean if np.isfinite(py_mean) else float("nan"))
+            dyn_p_path = os.path.join(subdir, "dyn_p.txt")
+            try:
+                q_inf = float(np.asarray(np.loadtxt(dyn_p_path), dtype=float).reshape(-1)[0])
+            except Exception:
+                q_inf = float("nan")
+            if not np.isfinite(q_inf) or q_inf <= 0.0:
+                raise ValueError(f"Missing or non-positive dynamic pressure in {dyn_p_path}")
+            cd_mean = pd_mean / q_inf
+            cl_mean = pl_mean / q_inf
+            cy_mean = py_mean / q_inf
+            qoi_values["C_D"].append(cd_mean)
+            qoi_values["C_D2"].append(cd_mean * cd_mean if np.isfinite(cd_mean) else float("nan"))
+            qoi_values["C_L"].append(cl_mean)
+            qoi_values["C_L2"].append(cl_mean * cl_mean if np.isfinite(cl_mean) else float("nan"))
+            qoi_values["C_Y"].append(cy_mean)
+            qoi_values["C_Y2"].append(cy_mean * cy_mean if np.isfinite(cy_mean) else float("nan"))
             qoi_values["P_Mx"].append(pmx_mean)
             qoi_values["P_My"].append(pmy_mean)
             qoi_values["P_Mz"].append(pmz_mean)

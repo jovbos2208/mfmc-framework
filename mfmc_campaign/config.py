@@ -141,6 +141,8 @@ def _expand_attitude_grid(config: Dict[str, Any]) -> None:
     grid = config.get("study", {}).get("attitude_grid")
     if not isinstance(grid, dict) or not bool(grid.get("enabled", True)):
         return
+    if bool(grid.get("_expanded", False)):
+        return
 
     aos_values = _attitude_axis_values(grid.get("aos_deg"), "aos_deg")
     aoa_values = _attitude_axis_values(grid.get("aoa_deg"), "aoa_deg")
@@ -164,6 +166,10 @@ def _expand_attitude_grid(config: Dict[str, Any]) -> None:
                 descriptors["aoa_deg"] = float(aoa_deg)
                 expanded.append(regime)
     config["regimes"] = expanded
+    # ``load_config`` normalizes once and ``run_campaign`` normalizes again.
+    # Remember that this grid has already been applied so the second pass does
+    # not turn N angle cases into N*N cases.
+    grid["_expanded"] = True
 
 
 def _mean_hf_cost_from_model_evaluations(config: Dict[str, Any], spec: Dict[str, Any]) -> float:

@@ -1383,6 +1383,7 @@ def run_campaign(
         )
 
     by_base_cell: Dict[Tuple[Any, ...], Dict[str, Dict[str, Any]]] = defaultdict(dict)
+    derived_written_by_base: Dict[Tuple[Any, ...], set] = defaultdict(set)
     external_model_eval_robustness_cache: Dict[Tuple[Any, ...], List[Dict[str, Any]]] = {}
 
     max_prod = int(cfg.get("sampling", {}).get("max_production_samples", 2000))
@@ -2533,6 +2534,8 @@ def run_campaign(
                     direct[key] = float(by_base_cell[base_key][key]["mfmc_estimate"])
             derived = derive_quantities(direct)
             for derived_name, derived_info in derived.items():
+                if derived_name in derived_written_by_base[base_key]:
+                    continue
                 anchor_key = derived_name.split("_", 1)[-1]
                 anchor = by_base_cell[base_key].get(anchor_key)
                 if anchor is None:
@@ -2551,6 +2554,7 @@ def run_campaign(
                 drow["realized_hf_error"] = float("nan")
                 drow["flags"] = ["derived_quantity"]
                 store.append_result(drow)
+                derived_written_by_base[base_key].add(derived_name)
 
         n_executed += 1
         primary_row = rows_written[0] if rows_written else {}

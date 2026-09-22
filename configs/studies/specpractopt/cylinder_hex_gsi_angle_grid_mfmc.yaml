@@ -1,5 +1,6 @@
-# One C_D MFMC estimator per deterministic AoS value at fixed AoA=0 deg. All
-# cells reuse the single 0/0-degree pilot and receive 20 mean TPMC-run costs.
+# One joint MFMC estimator for C_D, C_D2, lateral C_L and C_L2 per deterministic
+# AoS value at fixed AoA=0 deg. All cells reuse the single AoS=45/AoA=0 pilot
+# and receive a budget equal to 20 mean TPMC-run costs.
 
 study:
   id: specpractopt_cylinder_hex_gsi_tpmc_sentman_mfmc
@@ -88,6 +89,7 @@ models:
       piclas_mode: tpmc
       collision_mode: 0
       calc_quality_factors: false
+      qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
       payload_defaults:
         t_end_s: 1.0e-4
         manual_timestep_s: 1.0e-7
@@ -99,14 +101,18 @@ models:
       kwargs:
         simulator_module: ADBSat_prandtl
         base_dir: ADBSat-PyVersion
+        qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
   available_qois:
-    PICLas_TPMC: [C_D, C_D2]
-    Sentman: [C_D, C_D2]
+    PICLas_TPMC: [C_D, C_D2, C_L, C_L2]
+    Sentman: [C_D, C_D2, C_L, C_L2]
 
 qois:
-  direct: [C_D]
-  derived: []
+  direct: [C_D, C_D2, C_L, C_L2]
+  derived:
+    - {name: Var_C_D, expression: "E[C_D2]-E[C_D]^2"}
+    - {name: Var_C_L, expression: "E[C_L2]-E[C_L]^2"}
   batch_cd_cd2: false
+  single_allocation_all_qois: true
 
 pilot:
   size: 50
@@ -114,8 +120,8 @@ pilot:
   robustness_repetitions: 50
   # Relative to this config file. The pilot output itself is written relative
   # to the Framework repository root when the commands below are run there.
-  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman/pilot
-  source_study_id: specpractopt_cylinder_hex_gsi_sentman_pilot
+  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_aos45/pilot
+  source_study_id: specpractopt_cylinder_hex_gsi_sentman_aos45_pilot
   source_mode: mixed_uncertainty
   match_regime_id: false
   reuse_external_model_evaluation_stats: true
@@ -123,12 +129,12 @@ pilot:
 
 budget:
   from_model_evaluations:
-    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman/pilot/model_evaluations.csv
+    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_aos45/pilot/model_evaluations.csv
     phase: pilot_hf
     model_id: PICLas_TPMC
     qoi: C_D
     geometry_id: SpecPractOpt_cylinder_hex
-    regime_id: AO_1E15_FIXED
+    regime_id: AO_1E15_FIXED_AOS_P045_AOA_P000
     cost_column: cost
     multiples: [20.0]
   # Validation fallback before the pilot exists; the pilot-derived value
@@ -141,7 +147,7 @@ repetitions: 1
 seeds: {global: 20260922}
 
 outputs:
-  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman/angle_grid_mfmc
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_aos45/angle_grid_mfmc
   write_parquet: false
   write_model_evaluations: true
   write_config_snapshot: true

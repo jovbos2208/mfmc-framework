@@ -1003,6 +1003,29 @@ class BaseModelAdapter:
         raise NotImplementedError
 
 
+def _normalize_qoi_aliases(raw: Any, model_id: str) -> Dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise TypeError(f"qoi_aliases must be a mapping for model '{model_id}'")
+    return {str(output_qoi): str(solver_qoi) for output_qoi, solver_qoi in raw.items()}
+
+
+def _solver_qois(requested_qois: List[str], aliases: Dict[str, str]) -> List[str]:
+    return list(dict.fromkeys(aliases.get(str(qoi), str(qoi)) for qoi in requested_qois))
+
+
+def _restore_qoi_aliases(
+    values_by_qoi: Dict[str, Any],
+    requested_qois: List[str],
+    aliases: Dict[str, str],
+) -> Dict[str, List[float]]:
+    return {
+        str(qoi): list(np.asarray(values_by_qoi.get(aliases.get(str(qoi), str(qoi)), []), dtype=float))
+        for qoi in requested_qois
+    }
+
+
 class MockModelAdapter(BaseModelAdapter):
     def __init__(self, model_id: str, fidelity: str, available_qois: List[str]):
         super().__init__(model_id=model_id, fidelity=fidelity, available_qois=available_qois)
@@ -1052,6 +1075,7 @@ class LegacyPiclasAdapter(BaseModelAdapter):
 
         sim_kwargs = dict(kwargs)
         simulator_module = str(sim_kwargs.pop("simulator_module", "PICLas"))
+        self.qoi_aliases = _normalize_qoi_aliases(sim_kwargs.pop("qoi_aliases", {}), model_id)
         payload_defaults = sim_kwargs.pop("payload_defaults", sim_kwargs.pop("environment_payload_defaults", {}))
         if payload_defaults is None:
             payload_defaults = {}
@@ -1134,6 +1158,9 @@ class LegacyPiclasAdapter(BaseModelAdapter):
 
     def submit(self, request: EvaluationRequest):
         altitude, aos, _aoa, indices, env_model, payload_dir, env_payload_paths, aos_values, aoa_values, random_seeds = self._prepare_batch_request(request)
+        requested_qois = list(request.qois)
+        qoi_aliases = getattr(self, "qoi_aliases", {})
+        solver_qois = _solver_qois(requested_qois, qoi_aliases)
         try:
             if hasattr(self.sim, "submit_batch_jobs"):
                 submit_method = self.sim.submit_batch_jobs
@@ -1191,7 +1218,7 @@ class LegacyPiclasAdapter(BaseModelAdapter):
                     aos,
                     indices,
                     int(request.seed),
-                    requested_qois=list(request.qois),
+                    requested_qois=solver_qois,
                     env_payload_paths=env_payload_paths,
                     env_model=env_model,
                     aos_values=aos_values,
@@ -1201,7 +1228,7 @@ class LegacyPiclasAdapter(BaseModelAdapter):
                 )
                 batch_handle = {
                     "_completed_result": EvaluationResult(
-                        values_by_qoi={q: list(np.asarray(qoi_values.get(q, []), dtype=float)) for q in request.qois},
+                        values_by_qoi=_restore_qoi_aliases(qoi_values, requested_qois, qoi_aliases),
                         costs=list(np.asarray(cpu_hours_list, dtype=float)),
                         sample_ids=list(request.sample_ids),
                     )
@@ -1209,7 +1236,8 @@ class LegacyPiclasAdapter(BaseModelAdapter):
         finally:
             shutil.rmtree(payload_dir, ignore_errors=True)
 
-        batch_handle["requested_qois"] = list(request.qois)
+        batch_handle["requested_qois"] = solver_qois
+        batch_handle["output_qois"] = requested_qois
         batch_handle["sample_ids"] = list(request.sample_ids)
         batch_handle["random_seed"] = int(request.seed)
         batch_handle["surface_archive_context"] = {
@@ -1250,17 +1278,19 @@ class LegacyPiclasAdapter(BaseModelAdapter):
         return postprocess_handle
 
     def collect_outputs(self, batch_handle) -> EvaluationResult:
-        requested_qois = list(batch_handle.get("requested_qois", []))
+        solver_qois = list(batch_handle.get("requested_qois", []))
+        requested_qois = list(batch_handle.get("output_qois", solver_qois))
+        qoi_aliases = getattr(self, "qoi_aliases", {})
         qoi_values, cpu_hours_list = self.sim.collect_batch_results(
             batch_handle,
-            requested_qois=requested_qois,
+            requested_qois=solver_qois,
         )
         metadata: Dict[str, Any] = {}
         archive_summary = self._maybe_export_surface_archive(batch_handle)
         if archive_summary:
             metadata["surface_archive"] = archive_summary
         return EvaluationResult(
-            values_by_qoi={q: list(np.asarray(qoi_values.get(q, []), dtype=float)) for q in requested_qois},
+            values_by_qoi=_restore_qoi_aliases(qoi_values, requested_qois, qoi_aliases),
             costs=list(np.asarray(cpu_hours_list, dtype=float)),
             sample_ids=list(batch_handle.get("sample_ids", [])),
             metadata=metadata,
@@ -1371,6 +1401,7 @@ class LegacyADBSatAdapter(BaseModelAdapter):
 
         sim_kwargs = dict(kwargs)
         simulator_module = str(sim_kwargs.pop("simulator_module", "ADBSat"))
+        self.qoi_aliases = _normalize_qoi_aliases(sim_kwargs.pop("qoi_aliases", {}), model_id)
         self.surface_archive_config = sim_kwargs.pop(
             "surface_archive",
             sim_kwargs.pop("field_surface_archive", {}),
@@ -1415,7 +1446,11 @@ class LegacyADBSatAdapter(BaseModelAdapter):
     def _collect_adbsat_results(self, request: EvaluationRequest, run_ids: List[int]) -> EvaluationResult:
         values_by_qoi = {q: [] for q in request.qois}
         if hasattr(self.sim, "analyze_simulation_results_qois"):
-            qoi_data, costs, ret_idx = self.sim.analyze_simulation_results_qois(run_ids, requested_qois=request.qois)
+            solver_qois = _solver_qois(list(request.qois), self.qoi_aliases)
+            qoi_data, costs, ret_idx = self.sim.analyze_simulation_results_qois(
+                run_ids,
+                requested_qois=solver_qois,
+            )
             costs = np.asarray(costs, dtype=float)
             ret_idx = np.asarray(ret_idx, dtype=int)
             ordered_costs = []
@@ -1427,11 +1462,20 @@ class LegacyADBSatAdapter(BaseModelAdapter):
                     ordered_costs.append(float("nan"))
 
             for q in request.qois:
-                arr = np.asarray(qoi_data.get(q, []), dtype=float)
+                solver_qoi = self.qoi_aliases.get(str(q), str(q))
+                arr = np.asarray(qoi_data.get(solver_qoi, []), dtype=float)
                 idx_to_val = {int(i): float(v) for i, v in zip(ret_idx, arr)}
                 ordered_vals = [idx_to_val.get(int(run_id), float("nan")) for run_id in run_ids]
-                if q == "C_D2" and len(arr) == 0 and "C_D" in qoi_data:
-                    cd_idx_to_val = {int(i): float(v) for i, v in zip(ret_idx, np.asarray(qoi_data["C_D"], dtype=float))}
+                square_base = {
+                    "C_D2": "C_D",
+                    "C_L2": "C_L",
+                    "C_Y2": "C_Y",
+                }.get(solver_qoi)
+                if square_base is not None and len(arr) == 0 and square_base in qoi_data:
+                    cd_idx_to_val = {
+                        int(i): float(v)
+                        for i, v in zip(ret_idx, np.asarray(qoi_data[square_base], dtype=float))
+                    }
                     ordered_vals = [
                         (cd_idx_to_val[int(run_id)] ** 2)
                         if int(run_id) in cd_idx_to_val and np.isfinite(cd_idx_to_val[int(run_id)])

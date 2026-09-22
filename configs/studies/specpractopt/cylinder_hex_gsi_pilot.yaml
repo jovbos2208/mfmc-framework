@@ -1,8 +1,8 @@
-# One paired pilot at AoS=AoA=0 deg. The production campaign reuses its
+# One paired pilot at AoS=45 deg and AoA=0 deg. The production campaign reuses its
 # TPMC/ADBSat-Sentman values, correlations, beta coefficients and measured costs.
 
 study:
-  id: specpractopt_cylinder_hex_gsi_sentman_pilot
+  id: specpractopt_cylinder_hex_gsi_sentman_aos45_pilot
   mode: mixed_uncertainty
   active_source_blocks:
     - gsi.energy_accommodation
@@ -28,8 +28,8 @@ geometries:
       reference_area_source: piclas_h5_OBJ_half_total_surface
 
 regimes:
-  - id: AO_1E15_FIXED
-    label: Fixed pure atomic oxygen at 1e15 particles per cubic metre
+  - id: AO_1E15_FIXED_AOS_P045_AOA_P000
+    label: Fixed pure atomic oxygen at 1e15 particles per cubic metre; AoS=45 deg; AoA=0 deg
     descriptors:
       altitude_km: 313.0
       characteristic_length: 0.35902899
@@ -45,7 +45,7 @@ regimes:
       density_kg_m3: 2.65669645265334e-11
       number_density_m3: 1.0e+15
       relative_speed_mps: 7718.371
-      aos_deg: 0.0
+      aos_deg: 45.0
       aoa_deg: 0.0
 
 variables:
@@ -75,6 +75,7 @@ models:
       piclas_mode: tpmc
       collision_mode: 0
       calc_quality_factors: false
+      qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
       payload_defaults:
         t_end_s: 1.0e-4
         manual_timestep_s: 1.0e-7
@@ -86,14 +87,18 @@ models:
       kwargs:
         simulator_module: ADBSat_prandtl
         base_dir: ADBSat-PyVersion
+        qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
   available_qois:
-    PICLas_TPMC: [C_D, C_D2]
-    Sentman: [C_D, C_D2]
+    PICLas_TPMC: [C_D, C_D2, C_L, C_L2]
+    Sentman: [C_D, C_D2, C_L, C_L2]
 
 qois:
-  direct: [C_D]
-  derived: []
+  direct: [C_D, C_D2, C_L, C_L2]
+  derived:
+    - {name: Var_C_D, expression: "E[C_D2]-E[C_D]^2"}
+    - {name: Var_C_L, expression: "E[C_L2]-E[C_L]^2"}
   batch_cd_cd2: false
+  single_allocation_all_qois: true
 
 pilot:
   size: 50
@@ -111,7 +116,7 @@ repetitions: 1
 seeds: {global: 20260922}
 
 outputs:
-  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman/pilot
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_aos45/pilot
   write_parquet: false
   write_model_evaluations: true
   write_config_snapshot: true
@@ -120,7 +125,7 @@ outputs:
 execution:
   backend: legacy_slurm
   resume: false
-  aos_deg: 0.0
+  aos_deg: 45.0
   aoa_deg: 0.0
   flow_zero_direction: [1.0, 0.0, 0.0]
   adbsat_aos_offset_deg: 0.0
