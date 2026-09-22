@@ -1,22 +1,19 @@
 # One paired pilot at AoS=AoA=0 deg. The production campaign reuses its
-# TPMC/ADBSat values, correlations, beta coefficients and measured costs.
+# TPMC/ADBSat-Sentman values, correlations, beta coefficients and measured costs.
 
 study:
-  id: specpractopt_cylinder_hex_gsi_pilot
+  id: specpractopt_cylinder_hex_gsi_sentman_pilot
   mode: mixed_uncertainty
   active_source_blocks:
     - gsi.energy_accommodation
-    - gsi.cll_parameters
     - gsi.surface_temperature
   mixed_source_blocks:
     - - gsi.energy_accommodation
-      - gsi.cll_parameters
       - gsi.surface_temperature
 
 sources:
   blocks:
     - {name: gsi.energy_accommodation}
-    - {name: gsi.cll_parameters}
     - {name: gsi.surface_temperature}
 
 geometries:
@@ -52,20 +49,15 @@ regimes:
       aoa_deg: 0.0
 
 variables:
-  - name: trans_accommodation
+  - name: energy_accommodation
     source_block: gsi.energy_accommodation
-    distribution: {kind: uniform, params: {low: 0.70, high: 1.00}}
-    baseline: 0.892414
-    bounds: [0.70, 1.00]
-  - name: momentum_accommodation
-    source_block: gsi.cll_parameters
-    distribution: {kind: uniform, params: {low: 0.50, high: 1.00}}
-    baseline: 0.796403
-    bounds: [0.50, 1.00]
+    distribution: {kind: normal, params: {mean: 0.5, std: 0.1}}
+    baseline: 0.5
+    bounds: [0.0, 1.0]
   - name: wall_temperature_k
     source_block: gsi.surface_temperature
-    distribution: {kind: uniform, params: {low: 250.0, high: 400.0}}
-    baseline: 286.036
+    distribution: {kind: normal, params: {mean: 300.0, std: 25.0}}
+    baseline: 300.0
     bounds: [250.0, 400.0]
 
 sampling:
@@ -88,15 +80,15 @@ models:
         manual_timestep_s: 1.0e-7
         sampling_iterations: 250
   lf:
-    - id: ADBSat_PICLasMaxwell
+    - id: Sentman
       kind: legacy_adbsat
-      method: PICLasMaxwell
+      method: Sentman
       kwargs:
         simulator_module: ADBSat_prandtl
         base_dir: ADBSat-PyVersion
   available_qois:
     PICLas_TPMC: [C_D, C_D2]
-    ADBSat_PICLasMaxwell: [C_D, C_D2]
+    Sentman: [C_D, C_D2]
 
 qois:
   direct: [C_D]
@@ -119,7 +111,7 @@ repetitions: 1
 seeds: {global: 20260922}
 
 outputs:
-  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi/pilot
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman/pilot
   write_parquet: false
   write_model_evaluations: true
   write_config_snapshot: true

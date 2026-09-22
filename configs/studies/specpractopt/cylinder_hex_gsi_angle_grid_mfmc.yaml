@@ -2,15 +2,13 @@
 # cells reuse the single 0/0-degree pilot and receive 20 mean TPMC-run costs.
 
 study:
-  id: specpractopt_cylinder_hex_gsi_tpmc_adbsat_mfmc
+  id: specpractopt_cylinder_hex_gsi_tpmc_sentman_mfmc
   mode: mixed_uncertainty
   active_source_blocks:
     - gsi.energy_accommodation
-    - gsi.cll_parameters
     - gsi.surface_temperature
   mixed_source_blocks:
     - - gsi.energy_accommodation
-      - gsi.cll_parameters
       - gsi.surface_temperature
   attitude_grid:
     aos_deg: {start: -90.0, stop: 90.0, step: 5.0}
@@ -19,7 +17,6 @@ study:
 sources:
   blocks:
     - {name: gsi.energy_accommodation}
-    - {name: gsi.cll_parameters}
     - {name: gsi.surface_temperature}
 
 geometries:
@@ -65,20 +62,15 @@ regimes:
         - 961.0
 
 variables:
-  - name: trans_accommodation
+  - name: energy_accommodation
     source_block: gsi.energy_accommodation
-    distribution: {kind: uniform, params: {low: 0.70, high: 1.00}}
-    baseline: 0.892414
-    bounds: [0.70, 1.00]
-  - name: momentum_accommodation
-    source_block: gsi.cll_parameters
-    distribution: {kind: uniform, params: {low: 0.50, high: 1.00}}
-    baseline: 0.796403
-    bounds: [0.50, 1.00]
+    distribution: {kind: normal, params: {mean: 0.5, std: 0.1}}
+    baseline: 0.5
+    bounds: [0.0, 1.0]
   - name: wall_temperature_k
     source_block: gsi.surface_temperature
-    distribution: {kind: uniform, params: {low: 250.0, high: 400.0}}
-    baseline: 286.036
+    distribution: {kind: normal, params: {mean: 300.0, std: 25.0}}
+    baseline: 300.0
     bounds: [250.0, 400.0]
 
 sampling:
@@ -101,15 +93,15 @@ models:
         manual_timestep_s: 1.0e-7
         sampling_iterations: 250
   lf:
-    - id: ADBSat_PICLasMaxwell
+    - id: Sentman
       kind: legacy_adbsat
-      method: PICLasMaxwell
+      method: Sentman
       kwargs:
         simulator_module: ADBSat_prandtl
         base_dir: ADBSat-PyVersion
   available_qois:
     PICLas_TPMC: [C_D, C_D2]
-    ADBSat_PICLasMaxwell: [C_D, C_D2]
+    Sentman: [C_D, C_D2]
 
 qois:
   direct: [C_D]
@@ -122,8 +114,8 @@ pilot:
   robustness_repetitions: 50
   # Relative to this config file. The pilot output itself is written relative
   # to the Framework repository root when the commands below are run there.
-  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi/pilot
-  source_study_id: specpractopt_cylinder_hex_gsi_pilot
+  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman/pilot
+  source_study_id: specpractopt_cylinder_hex_gsi_sentman_pilot
   source_mode: mixed_uncertainty
   match_regime_id: false
   reuse_external_model_evaluation_stats: true
@@ -131,7 +123,7 @@ pilot:
 
 budget:
   from_model_evaluations:
-    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi/pilot/model_evaluations.csv
+    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman/pilot/model_evaluations.csv
     phase: pilot_hf
     model_id: PICLas_TPMC
     qoi: C_D
@@ -149,7 +141,7 @@ repetitions: 1
 seeds: {global: 20260922}
 
 outputs:
-  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi/angle_grid_mfmc
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman/angle_grid_mfmc
   write_parquet: false
   write_model_evaluations: true
   write_config_snapshot: true

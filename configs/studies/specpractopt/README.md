@@ -1,9 +1,14 @@
-# SpecPractOpt cylinder: TPMC/ADBSat MFMC angle grid
+# SpecPractOpt cylinder: TPMC/Sentman MFMC angle grid
 
 Run both stages from the Framework repository root. The pilot is evaluated once
-at `AoS=AoA=0 deg`. Its paired TPMC/ADBSat samples and measured costs are then
+at `AoS=AoA=0 deg`. Its paired TPMC/Sentman samples and measured costs are then
 reused for all 37 deterministic AoS cells. AoA remains fixed at `0 deg`; AoS
 runs from `-90 deg` through `+90 deg` in increments of `5 deg`.
+
+Only two GSI inputs are uncertain. Energy accommodation follows a bounded
+normal distribution with mean `0.5`, standard deviation `0.1`, and bounds
+`[0, 1]`. Wall temperature follows a bounded normal distribution with mean
+`300 K`, standard deviation `25 K`, and bounds `[250, 400] K`.
 
 ```bash
 cd public_repo/Framework
