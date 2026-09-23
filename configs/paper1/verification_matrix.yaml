@@ -1,0 +1,130 @@
+schema_version: 1
+status: prepared_not_run
+qois:
+- C_D
+- C_D2
+fixed_state:
+  species: atomic_oxygen
+  number_density_m3: 1000000000000000.0
+  freestream_temperature_k: 1000.0
+  wall_temperature_k: 300.0
+  relative_speed_mps: 7500.0
+  gsi:
+    reflection: fully_diffuse
+    thermal_accommodation: 1.0
+    warning: Map separately to each solver definition; identical numeric values do
+      not prove semantic identity.
+cases:
+- geometry: sphere
+  orientations:
+  - nominal
+  angle_sweep_deg:
+  - -5
+  - -2
+  - 0
+  - 2
+  - 5
+- geometry: hemisphere_shell
+  orientations:
+  - name: cup_forward
+    aos_deg: 0.0
+    opening_normal_body:
+    - -1
+    - 0
+    - 0
+  - name: cup_backward
+    aos_deg: 180.0
+    opening_normal_body:
+    - -1
+    - 0
+    - 0
+  angle_sweep_deg:
+  - -10
+  - -5
+  - -2
+  - 0
+  - 2
+  - 5
+  - 10
+variants:
+  surface_resolution:
+  - coarse
+  - medium
+  - fine
+  volume_resolution:
+  - coarse
+  - medium
+  - fine
+  domain:
+  - standard_2p5D
+  - large_5D
+  timestep_s:
+  - 5.0e-08
+  - 1.0e-07
+  - 2.0e-07
+  macro_particle_factor_scale:
+  - 0.5
+  - 1.0
+  - 2.0
+  sampling_iterations:
+  - 250
+  - 500
+  - 1000
+acceptance_rules:
+- No aerodynamic reference value is embedded until sourced.
+- Compare integrated force and Cd separately from mesh/time/particle convergence.
+- Cup interior-only literature values must not be compared to total finite-thickness
+  shell force.
+study:
+  model_hierarchy: PICLas DSMC (HF); PICLas TPMC and ADBSat Sentman (LF controls)
+model_hierarchy:
+  high_fidelity: PICLas_DSMC
+  low_fidelity:
+  - PICLas_TPMC
+  - Sentman
+gsi_mapping:
+  shared_sample: energy_accommodation alpha and wall_temperature_k
+  PICLas_DSMC_and_TPMC:
+    TransACC: alpha
+    MomentumACC: alpha^2 unless independently sampled
+    VibACC: 1.0
+    RotACC: 1.0
+  ADBSat_Sentman:
+    alpha: alpha
+    Tw: wall_temperature_k
+  interpretation: shared physical accommodation axis, not identical scattering kernels
+proposed_acceptance_criteria:
+  input_identity:
+  - All three branches have identical sample IDs and atmosphere, velocity, attitude,
+    alpha, Tw and Aref audit values.
+  - Relative numerical equality for shared scalar inputs <=1e-12 before solver-specific
+    formatting.
+  geometry_and_mesh:
+  - No degenerate/duplicate faces, missing boundaries, negative tetra volumes or negative
+    scaled Jacobians.
+  - Medium-to-fine surface Cd change <=1.0%.
+  - Standard-to-large-domain Cd change <=0.5%.
+  deterministic_physics:
+  - Sphere TPMC and Sentman Cd differ from the selected literature formula by <=2.0%;
+    DSMC collisionless mean differs by <=3.0% and its 95% CI contains the reference.
+  - Sphere signed angle sweep changes Cd by <=0.5%.
+  - Shell +/- angle symmetry residual <=2.0% where symmetry predicts equality; cup-forward/backward
+    force signs must be consistent.
+  DSMC_numerics:
+  - Time-step refinement changes mean Cd <=1.0%.
+  - Particle-number refinement changes mean Cd by <=1.0% or the difference lies within
+    the combined 95% sampling interval.
+  - Relative standard error of mean Cd <=0.5% and <=20% of the physical-input standard
+    deviation used for UQ.
+  pilot_and_MFMC:
+  - At least 32 paired samples per cell initially; expand if bootstrap correlation
+    intervals remain broad.
+  - Retain a control only if the 10th percentile bootstrap predicted MSE reduction
+    is positive and median reduction is at least 10%.
+  - Allocated model counts vary by no more than 20% across central bootstrap resamples,
+    otherwise enlarge the pilot.
+  production_claims:
+  - MFMC efficiency claim requires equal realized total cost and a 95% interval for
+    RMSE ratio entirely below 1.
+  - Cd variance reconstruction must be reported with joint-moment uncertainty and
+    may not be silently clipped.

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "GOCE": {
+    "configuration": "configs/mfpod/goce_tpmc_sentman.yaml",
+    "configured_state": "244.14592193 km trajectory-conditioned fixed state",
+    "configured_characteristic_length_m": 5.0,
+    "configured_reference_area_m2": 0.0236561598414,
+    "mesh": "piclas/GOCE_mesh.h5",
+    "adbsat_model": "ADBSat-PyVersion/inou/models/GOCE.mat",
+    "field_archives_declared": [
+      "data/field_inputs/goce_244km/DSMC_surface_loads.npz",
+      "data/field_inputs/goce_244km/TPMC_surface_loads.npz"
+    ],
+    "inspection": "outputs/field_pod_mfmc_three_fidelity/GOCE-244km-TPMC/inspection/data_availability_report.md",
+    "availability": {
+      "DSMC_snapshots": 100,
+      "TPMC_snapshots": 160,
+      "paired": 50,
+      "ready": false,
+      "missing_required_metadata": [
+        "component_order",
+        "coordinate_frame"
+      ],
+      "missing_preferred_metadata": [
+        "cpu_hours",
+        "face_normal",
+        "hardware",
+        "reference_point"
+      ]
+    },
+    "status": "configuration prepared; archived fields inventory exists but current checker not ready"
+  },
+  "CHAMP": {
+    "legacy_snapshot": "outputs/vleo_wp1_backfill/champ_100km/config_snapshot.json",
+    "legacy_state": "100 km fixed nominal orbit state with input uncertainty",
+    "legacy_counts": {
+      "PICLas_HF": 120,
+      "PICLas_TPMC": 2080,
+      "Sentman": 40740,
+      "CLL": 50020
+    },
+    "mesh": "piclas/CHAMP_mesh.h5",
+    "adbsat_model": "ADBSat-PyVersion/inou/models/CHAMP.mat",
+    "surface_fields_available": false,
+    "global_Cd_data": "available in backfilled model_evaluations.csv and sample_inputs.csv",
+    "scale_conflict": {
+      "legacy_campaign_characteristic_length_m": 2.0,
+      "adbsat_mat_Lref": 1000.0,
+      "resolution": "required before production"
+    },
+    "draft_config": "configs/paper2/champ_mfpod_DRAFT.yaml",
+    "status": "draft only; original scale, A_ref, mission population, and field exports unresolved"
+  }
+}

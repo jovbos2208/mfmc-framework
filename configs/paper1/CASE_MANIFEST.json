@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "qois": [
+    "C_D",
+    "C_D2"
+  ],
+  "active_geometries": [
+    "cube",
+    "sphere",
+    "hemisphere_shell"
+  ],
+  "excluded_from_paper1": [
+    "SOAR",
+    "GOCE",
+    "CHAMP"
+  ],
+  "cases": [
+    {
+      "case": "cube_100km",
+      "geometry": "cube",
+      "altitude_km": 100,
+      "config": "configs/paper1/cube_100km.yaml",
+      "mesh": "Cube_P1_0p1m_mesh.h5",
+      "reference_area_m2": 0.01,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 24.211426620743747,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true,
+      "adbsat_model": "Cube_P1_0p1m"
+    },
+    {
+      "case": "sphere_100km",
+      "geometry": "sphere",
+      "altitude_km": 100,
+      "config": "configs/paper1/sphere_100km.yaml",
+      "mesh": "geometry/paper1/sphere/sphere_d0p1_medium_mesh.h5",
+      "reference_area_m2": 0.007853981633974483,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 2.4211426620743746,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true
+    },
+    {
+      "case": "hemisphere_shell_100km",
+      "geometry": "hemisphere_shell",
+      "altitude_km": 100,
+      "config": "configs/paper1/hemisphere_shell_100km.yaml",
+      "mesh": "geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_medium_mesh.h5",
+      "reference_area_m2": 0.007853981633974483,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 2.4211426620743746,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true
+    },
+    {
+      "case": "cube_200km",
+      "geometry": "cube",
+      "altitude_km": 200,
+      "config": "configs/paper1/cube_200km.yaml",
+      "mesh": "Cube_P1_0p1m_mesh.h5",
+      "reference_area_m2": 0.01,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 30649.22995137427,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true,
+      "adbsat_model": "Cube_P1_0p1m"
+    },
+    {
+      "case": "sphere_200km",
+      "geometry": "sphere",
+      "altitude_km": 200,
+      "config": "configs/paper1/sphere_200km.yaml",
+      "mesh": "geometry/paper1/sphere/sphere_d0p1_medium_mesh.h5",
+      "reference_area_m2": 0.007853981633974483,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 3064.922995137427,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true
+    },
+    {
+      "case": "hemisphere_shell_200km",
+      "geometry": "hemisphere_shell",
+      "altitude_km": 200,
+      "config": "configs/paper1/hemisphere_shell_200km.yaml",
+      "mesh": "geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_medium_mesh.h5",
+      "reference_area_m2": 0.007853981633974483,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 3064.922995137427,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true
+    },
+    {
+      "case": "cube_300km",
+      "geometry": "cube",
+      "altitude_km": 300,
+      "config": "configs/paper1/cube_300km.yaml",
+      "mesh": "Cube_P1_0p1m_mesh.h5",
+      "reference_area_m2": 0.01,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 448221.82572581834,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true,
+      "adbsat_model": "Cube_P1_0p1m"
+    },
+    {
+      "case": "sphere_300km",
+      "geometry": "sphere",
+      "altitude_km": 300,
+      "config": "configs/paper1/sphere_300km.yaml",
+      "mesh": "geometry/paper1/sphere/sphere_d0p1_medium_mesh.h5",
+      "reference_area_m2": 0.007853981633974483,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 44822.18257258183,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true
+    },
+    {
+      "case": "hemisphere_shell_300km",
+      "geometry": "hemisphere_shell",
+      "altitude_km": 300,
+      "config": "configs/paper1/hemisphere_shell_300km.yaml",
+      "mesh": "geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_medium_mesh.h5",
+      "reference_area_m2": 0.007853981633974483,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 44822.18257258183,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true
+    },
+    {
+      "case": "cube_400km",
+      "geometry": "cube",
+      "altitude_km": 400,
+      "config": "configs/paper1/cube_400km.yaml",
+      "mesh": "Cube_P1_0p1m_mesh.h5",
+      "reference_area_m2": 0.01,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 3501140.4730232977,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true,
+      "adbsat_model": "Cube_P1_0p1m"
+    },
+    {
+      "case": "sphere_400km",
+      "geometry": "sphere",
+      "altitude_km": 400,
+      "config": "configs/paper1/sphere_400km.yaml",
+      "mesh": "geometry/paper1/sphere/sphere_d0p1_medium_mesh.h5",
+      "reference_area_m2": 0.007853981633974483,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 350114.04730232974,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true
+    },
+    {
+      "case": "hemisphere_shell_400km",
+      "geometry": "hemisphere_shell",
+      "altitude_km": 400,
+      "config": "configs/paper1/hemisphere_shell_400km.yaml",
+      "mesh": "geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_medium_mesh.h5",
+      "reference_area_m2": 0.007853981633974483,
+      "characteristic_length_m": 0.1,
+      "knudsen_proxy": 350114.04730232974,
+      "status": "prepared_and_statically_validated",
+      "mesh_exists": true,
+      "adbsat_model_exists": true,
+      "output_path_unique": true
+    }
+  ],
+  "models": {
+    "high_fidelity": [
+      "PICLas_DSMC"
+    ],
+    "low_fidelity": [
+      "PICLas_TPMC",
+      "Sentman"
+    ]
+  }
+}

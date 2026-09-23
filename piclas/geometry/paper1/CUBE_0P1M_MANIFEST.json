@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "geometry_id": "Cube_P1_0p1m",
+  "source_mesh": "piclas/Cube_mesh.h5",
+  "uniform_scale_factor": 10.0,
+  "characteristic_length_m": 0.1,
+  "reference_area_m2": 0.01,
+  "reference_area_convention": "frontal square area L^2",
+  "solid_volume_m3": 0.001,
+  "piclas_mesh": "piclas/Cube_P1_0p1m_mesh.h5",
+  "piclas_boundary_names": [
+    "IN",
+    "OUT",
+    "CUBE"
+  ],
+  "piclas_n_elements": 492,
+  "mesh_bbox_m": {
+    "min": [
+      -0.95,
+      -0.9500000000000002,
+      -0.95
+    ],
+    "max": [
+      1.0499999999999998,
+      1.0499999999999998,
+      1.0499999999999998
+    ]
+  },
+  "adbsat_obj": "ADBSat-PyVersion/inou/obj_files/Cube_P1_0p1m.obj",
+  "adbsat_mat": "ADBSat-PyVersion/inou/models/Cube_P1_0p1m.mat",
+  "fingerprints": {
+    "piclas_sha256": "b6368ac84e6f96582e43547708ca19814c576ee41cf341427f87b356e568c41d",
+    "obj_sha256": "4876adef2674df4f19dba1f808d28996beff0aeaee3445780005f5d1b3f16b38"
+  },
+  "status": "uniformly_scaled legacy mesh; statically checked; solver and convergence verification pending"
+}

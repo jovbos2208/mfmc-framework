@@ -1,0 +1,300 @@
+case_name: CHAMP-DRAFT
+geometry_id: CHAMP
+output_root: ../../outputs/field_pod_mfmc_three_fidelity
+high_fidelity: DSMC
+control_variates:
+- TPMC
+fidelity_archives:
+  DSMC: ../../data/field_inputs/champ/DSMC_surface_loads.npz
+  TPMC: ../../data/field_inputs/champ/TPMC_surface_loads.npz
+costs:
+  DSMC: 1.0
+  TPMC: 0.05
+field_representation:
+  quantity: Total_ForcePerArea
+  nondimensionalize: true
+  area_weighted: true
+  coordinate_frame: body_fixed
+  component_order:
+  - x
+  - y
+  - z
+  centering: pilot_dsmc_mean
+pilot:
+  paired_samples: 30
+reference_samples: 50
+field_allocation:
+  enabled: true
+  mode: bootstrap_robust
+  mean_weight: 0.25
+  second_moment_weight: 0.75
+  covariance_ridge: 1.0e-10
+  psd_floor: 0.0
+  bootstrap_repeats: 500
+  robust_quantile: 0.9
+  random_seed: 12345
+  max_enumeration_candidates: 250000
+allocation_constraints:
+  budget_hf_equivalent: 20.0
+  minimum_target: 2
+  minimum_counts: {}
+  maximum_counts: {}
+  min_ratios: {}
+  max_ratios:
+    TPMC: 10.0
+pod:
+  number_of_modes: 5
+  matrix_free: true
+  eigensolver: eigsh
+  eigensolver_tolerance: 1.0e-08
+  max_iterations: 5000
+  negative_eigenvalue_tolerance: 1.0e-10
+  clip_small_negative_eigenvalues: false
+validation:
+  covariance_probe_count: 100
+  covariance_probe_seed: 4401
+  compare_scalar_drag_allocation: true
+  require_disjoint_roles: true
+  fixed_ratios:
+    TPMC: 5.0
+random_seed: 12345
+infeasible_policy: fail
+topology_tolerance:
+  area_rtol: 1.0e-10
+  center_atol: 1.0e-12
+  normal_atol: 1.0e-12
+production:
+  enabled: false
+  backend: legacy_slurm
+  study_id: champ_field_mfpod_draft
+  random_seed: 12345
+  model_ids:
+    DSMC: PICLas_HF
+    TPMC: PICLas_TPMC
+  maximum_counts:
+    DSMC: 20
+    TPMC: 200
+  geometry:
+    id: CHAMP
+    name: CHAMP
+    characteristic_length: 2.0
+    geometry_class: asymmetric
+    metadata:
+      hf_mesh: CHAMP_mesh.h5
+      lf_model: CHAMP
+      reference_area_m2: null
+      scale_status: 'UNRESOLVED: legacy campaign L_ref=2 m, ADBSat MAT Lref=1000,
+        PICLas mesh coordinates use another scale'
+  regime:
+    id: CHAMP_STATE_UNRESOLVED
+    label: 'DRAFT: choose mission state/statistical population'
+    descriptors:
+      altitude_km: null
+      characteristic_length: 5.0
+      speed_ratio: 8.0
+      freestream_temperature: 961.226929
+      composition_descriptor: O=0.725,N2=0.260,O2=0.011,He=0.003
+      datetime_utc: '2013-10-23T11:59:14+00:00'
+      lat_deg: -59.795608906
+      lon_deg: -77.410888066
+      density_kg_m3: 6.946359459858e-11
+      relative_speed_mps: 7802.648218
+      geometry_class: streamlined
+      surface_state: proxy_bounded
+  active_source_blocks:
+  - environment.density
+  - environment.composition
+  - environment.temperature
+  - environment.winds
+  - attitude.dispersion
+  - gsi.energy_accommodation
+  - gsi.surface_temperature
+  variables:
+  - name: density_state_scale
+    source_block: environment.density
+    distribution:
+      kind: normal
+      params:
+        mean: 1.0
+        std: 0.1
+    baseline: 1.0
+    bounds:
+    - 0.7
+    - 1.5
+  - name: density_state_temperature_offset_k
+    source_block: environment.density
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 60.0
+    baseline: 0.0
+    bounds:
+    - -200.0
+    - 200.0
+  - name: density_state_composition_shift
+    source_block: environment.density
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 0.04
+    baseline: 0.0
+    bounds:
+    - -0.18
+    - 0.18
+  - name: composition_shift
+    source_block: environment.composition
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 0.05
+    baseline: 0.0
+    bounds:
+    - -0.25
+    - 0.25
+  - name: temperature_offset_k
+    source_block: environment.temperature
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 100.0
+    baseline: 0.0
+    bounds:
+    - -300.0
+    - 300.0
+  - name: wind_east_mps
+    source_block: environment.winds
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 75.0
+    baseline: 0.0
+    bounds:
+    - -250.0
+    - 250.0
+  - name: wind_north_mps
+    source_block: environment.winds
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 50.0
+    baseline: 0.0
+    bounds:
+    - -250.0
+    - 250.0
+  - name: wind_up_mps
+    source_block: environment.winds
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 15.0
+    baseline: 0.0
+    bounds:
+    - -100.0
+    - 100.0
+  - name: aos_deg
+    source_block: attitude.dispersion
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 2.0
+    baseline: 0.0
+    bounds:
+    - -5.0
+    - 5.0
+  - name: aoa_deg
+    source_block: attitude.dispersion
+    distribution:
+      kind: normal
+      params:
+        mean: 0.0
+        std: 2.0
+    baseline: 0.0
+    bounds:
+    - -5.0
+    - 5.0
+  - name: energy_accommodation
+    source_block: gsi.energy_accommodation
+    distribution:
+      kind: normal
+      params:
+        mean: 0.9
+        std: 0.05
+    baseline: 0.9
+    bounds:
+    - 0.75
+    - 1.0
+  - name: wall_temperature_k
+    source_block: gsi.surface_temperature
+    distribution:
+      kind: normal
+      params:
+        mean: 300.0
+        std: 25.0
+    baseline: 300.0
+    bounds:
+    - 250.0
+    - 380.0
+  sampling:
+    method: independent
+  qois:
+  - C_D
+  - C_D2
+  execution:
+    backend: legacy_slurm
+    environment:
+      model: pymsis_hwm14
+      use_winds: true
+      apply_wind_to_speed: true
+    flow_zero_direction:
+    - -1.0
+    - 0.0
+    - 0.0
+    hf_mesh: CHAMP_mesh.h5
+  models:
+    hf:
+      id: PICLas_HF
+      kind: legacy_piclas
+      kwargs:
+        simulator_module: PICLas_prandtl
+        mpi_procs: 64
+        submission_batch_size: 10
+        submission_group_size: 1
+        surface_archive:
+          enabled: true
+          path: data/field_inputs/champ/DSMC_surface_loads.npz
+          case_name: GOCE-244km-TPMC
+          fidelity: DSMC
+          geometry_id: CHAMP
+          regime_id: GOCE_20131021_D3
+          append: true
+    lf:
+    - id: PICLas_TPMC
+      kind: legacy_piclas_tpmc
+      kwargs:
+        simulator_module: PICLas_prandtl
+        mpi_procs: 64
+        submission_batch_size: 10
+        submission_group_size: 10
+        surface_archive:
+          enabled: true
+          path: data/field_inputs/champ/TPMC_surface_loads.npz
+          case_name: GOCE-244km-TPMC
+          fidelity: TPMC
+          geometry_id: CHAMP
+          regime_id: GOCE_20131021_D3
+          append: true
+    available_qois:
+      PICLas_HF:
+      - C_D
+      - C_D2
+      PICLas_TPMC:
+      - C_D
+      - C_D2

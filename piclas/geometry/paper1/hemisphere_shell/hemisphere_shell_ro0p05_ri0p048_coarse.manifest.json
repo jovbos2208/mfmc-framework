@@ -1,0 +1,149 @@
+{
+  "assets": {
+    "adbsat_mat": "hemisphere_shell_ro0p05_ri0p048_coarse.mat",
+    "adbsat_obj": "hemisphere_shell_ro0p05_ri0p048_coarse.obj",
+    "canonical_surface_npz": "hemisphere_shell_ro0p05_ri0p048_coarse.surface.npz",
+    "gmsh_exterior_geo": "hemisphere_shell_ro0p05_ri0p048_coarse.exterior.geo",
+    "gmsh_exterior_msh": "hemisphere_shell_ro0p05_ri0p048_coarse.exterior.msh",
+    "piclas_volume_mesh": "hemisphere_shell_ro0p05_ri0p048_coarse_mesh.h5",
+    "pyhope_config": "hemisphere_shell_ro0p05_ri0p048_coarse.pyhope.ini",
+    "surface_stl": "hemisphere_shell_ro0p05_ri0p048_coarse.stl"
+  },
+  "characteristic_length_m": 0.1,
+  "coordinate_system": {
+    "nominal_molecular_velocity": "+x",
+    "origin": "sphere/shell center",
+    "transverse_axes": [
+      "y",
+      "z"
+    ]
+  },
+  "diameter_m": 0.1,
+  "fingerprint": "aa3d5cc814c7b4d1d674b022c8ccd61bbc488392058fed78c107b9f54f6bdcbc",
+  "generator": "mfmc-paper1-benchmark",
+  "generator_version": "1.0.0",
+  "geometry_id": "hemisphere_shell_ro0p05_ri0p048",
+  "geometry_kind": "hemisphere_shell",
+  "gmsh_validation": {
+    "absolute_gas_volume_error_m3": 0.0,
+    "boundary_triangle_counts": {
+      "CYLINDER_HEX": 512,
+      "IN": 66,
+      "OUT": 330
+    },
+    "checks": {
+      "finite_positive_tetrahedra": true,
+      "gas_volume_within_tolerance": true,
+      "inlet_boundary_present": true,
+      "outlet_boundary_present": true,
+      "spacecraft_boundary_present": true
+    },
+    "expected_gas_volume_m3": 0.12497087610258135,
+    "gas_volume_m3": 0.12497087610258135,
+    "maximum_tetrahedron_volume_m3": 0.00028897128302693057,
+    "mesh_fingerprint": "f345b67535fe1311df12924414e462928e7a8b6d53869afffa16c422f67b11d5",
+    "minimum_tetrahedron_volume_m3": 1.7226959330878316e-08,
+    "n_elements": 3506,
+    "n_nodes": 672,
+    "n_tetrahedra": 2598,
+    "valid": true
+  },
+  "mesh_controls": {
+    "body_mesh_size_m": 0.025,
+    "domain_half_extent_in_diameters": 2.5,
+    "expected_gas_volume_m3": 0.12497087610258135,
+    "farfield_mesh_size_m": 0.1
+  },
+  "nominal_orientation": "cup-forward",
+  "opening_normal": [
+    -1.0,
+    0.0,
+    0.0
+  ],
+  "piclas_boundary_mapping": {
+    "BENCHMARK_BODY": "reflective spacecraft wall",
+    "IN": "open/inflow",
+    "OUT": "open/outflow"
+  },
+  "pyhope_validation": {
+    "boundary_names": [
+      "in",
+      "out",
+      "benchmark_body"
+    ],
+    "low_quality_0_to_0p1": 10392,
+    "mesh_fingerprint": "3be9ffca66296c4aa9ecf8b8be3d3e0b7c3f56125f58f2ee62c47ad4ddaff3b9",
+    "nBCs": 3,
+    "nElems": 10392,
+    "nNodes": 83136,
+    "nSides": 62352,
+    "negative_scaled_jacobian_elements": 0,
+    "pyhope_version": "1.0.0",
+    "required_boundaries_present": true,
+    "scaled_jacobian_histogram": {
+      "0.0-0.1": 10392,
+      "0.1-0.2": 0,
+      "0.2-0.3": 0,
+      "0.3-0.4": 0,
+      "0.4-0.5": 0,
+      "0.5-0.6": 0,
+      "0.6-0.7": 0,
+      "0.7-0.8": 0,
+      "0.8-0.9": 0,
+      "<0.0": 0,
+      ">0.9-1.0": 0
+    },
+    "valid": true
+  },
+  "reference_area_convention": "pi*D^2/4, projected normal to body x-axis",
+  "reference_area_m2": 0.007853981633974483,
+  "resolution": "coarse",
+  "schema_version": 1,
+  "status": "surface_and_volume_statically_validated; solver_not_run",
+  "surface_regions": {
+    "1": "outer",
+    "2": "inner",
+    "3": "rim"
+  },
+  "surface_validation": {
+    "analytic_solid_volume_m3": 3.017604463528122e-05,
+    "bounds_max_m": [
+      0.05,
+      0.05,
+      0.05
+    ],
+    "bounds_min_m": [
+      2.9391523179536477e-18,
+      -0.05,
+      -0.05
+    ],
+    "checks": {
+      "cavity_aperture_unobstructed": true,
+      "finite": true,
+      "inner_normals_face_cavity": true,
+      "no_duplicate_faces": true,
+      "nondegenerate_triangles": true,
+      "outward_closed_surface_orientation": true,
+      "positive_solid_volume": true,
+      "projected_area_matches_reference": true,
+      "rim_normals_face_aperture": true,
+      "unit_normals": true,
+      "watertight_two_manifold": true
+    },
+    "duplicate_face_count": 0,
+    "euler_characteristic": 2,
+    "n_triangles": 512,
+    "n_unique_edges": 768,
+    "n_vertices": 258,
+    "projected_x_area_m2": 0.007653668647301796,
+    "region_triangle_counts": {
+      "inner": 240,
+      "outer": 240,
+      "rim": 32
+    },
+    "signed_solid_volume_m3": 2.912389741864963e-05,
+    "surface_area_m2": 0.0302554342727914,
+    "valid": true
+  },
+  "units": "m"
+}

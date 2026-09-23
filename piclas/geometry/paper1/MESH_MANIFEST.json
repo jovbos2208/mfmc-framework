@@ -1,0 +1,790 @@
+{
+  "entries": [
+    {
+      "geometry": "hemisphere_shell",
+      "gmsh": {
+        "absolute_gas_volume_error_m3": 0.0,
+        "boundary_triangle_counts": {
+          "CYLINDER_HEX": 512,
+          "IN": 66,
+          "OUT": 330
+        },
+        "checks": {
+          "finite_positive_tetrahedra": true,
+          "gas_volume_within_tolerance": true,
+          "inlet_boundary_present": true,
+          "outlet_boundary_present": true,
+          "spacecraft_boundary_present": true
+        },
+        "expected_gas_volume_m3": 0.12497087610258135,
+        "gas_volume_m3": 0.12497087610258135,
+        "maximum_tetrahedron_volume_m3": 0.00028897128302693057,
+        "mesh_fingerprint": "f345b67535fe1311df12924414e462928e7a8b6d53869afffa16c422f67b11d5",
+        "minimum_tetrahedron_volume_m3": 1.7226959330878316e-08,
+        "n_elements": 3506,
+        "n_nodes": 672,
+        "n_tetrahedra": 2598,
+        "valid": true
+      },
+      "manifest": "piclas/geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_coarse.manifest.json",
+      "piclas_hdf5": {
+        "boundary_names": [
+          "in",
+          "out",
+          "benchmark_body"
+        ],
+        "low_quality_0_to_0p1": 10392,
+        "mesh_fingerprint": "3be9ffca66296c4aa9ecf8b8be3d3e0b7c3f56125f58f2ee62c47ad4ddaff3b9",
+        "nBCs": 3,
+        "nElems": 10392,
+        "nNodes": 83136,
+        "nSides": 62352,
+        "negative_scaled_jacobian_elements": 0,
+        "pyhope_version": "1.0.0",
+        "required_boundaries_present": true,
+        "scaled_jacobian_histogram": {
+          "0.0-0.1": 10392,
+          "0.1-0.2": 0,
+          "0.2-0.3": 0,
+          "0.3-0.4": 0,
+          "0.4-0.5": 0,
+          "0.5-0.6": 0,
+          "0.6-0.7": 0,
+          "0.7-0.8": 0,
+          "0.8-0.9": 0,
+          "<0.0": 0,
+          ">0.9-1.0": 0
+        },
+        "valid": true
+      },
+      "reference_area_m2": 0.007853981633974483,
+      "resolution": "coarse",
+      "surface": {
+        "analytic_solid_volume_m3": 3.017604463528122e-05,
+        "bounds_max_m": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "bounds_min_m": [
+          2.9391523179536477e-18,
+          -0.05,
+          -0.05
+        ],
+        "checks": {
+          "cavity_aperture_unobstructed": true,
+          "finite": true,
+          "inner_normals_face_cavity": true,
+          "no_duplicate_faces": true,
+          "nondegenerate_triangles": true,
+          "outward_closed_surface_orientation": true,
+          "positive_solid_volume": true,
+          "projected_area_matches_reference": true,
+          "rim_normals_face_aperture": true,
+          "unit_normals": true,
+          "watertight_two_manifold": true
+        },
+        "duplicate_face_count": 0,
+        "euler_characteristic": 2,
+        "n_triangles": 512,
+        "n_unique_edges": 768,
+        "n_vertices": 258,
+        "projected_x_area_m2": 0.007653668647301796,
+        "region_triangle_counts": {
+          "inner": 240,
+          "outer": 240,
+          "rim": 32
+        },
+        "signed_solid_volume_m3": 2.912389741864963e-05,
+        "surface_area_m2": 0.0302554342727914,
+        "valid": true
+      }
+    },
+    {
+      "geometry": "hemisphere_shell",
+      "gmsh": {
+        "absolute_gas_volume_error_m3": 1.3877787807814457e-17,
+        "boundary_triangle_counts": {
+          "CYLINDER_HEX": 2560,
+          "IN": 246,
+          "OUT": 1230
+        },
+        "checks": {
+          "finite_positive_tetrahedra": true,
+          "gas_volume_within_tolerance": true,
+          "inlet_boundary_present": true,
+          "outlet_boundary_present": true,
+          "spacecraft_boundary_present": true
+        },
+        "expected_gas_volume_m3": 0.12497008966584809,
+        "gas_volume_m3": 0.12497008966584808,
+        "maximum_tetrahedron_volume_m3": 5.221767589241836e-05,
+        "mesh_fingerprint": "90f7b6e03a2ab0756d53470035649a2e163a384bb7e30f4171c62fd8638e2c9a",
+        "minimum_tetrahedron_volume_m3": 8.322908164098283e-10,
+        "n_elements": 21492,
+        "n_nodes": 3875,
+        "n_tetrahedra": 17456,
+        "valid": true
+      },
+      "manifest": "piclas/geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_fine.manifest.json",
+      "piclas_hdf5": {
+        "boundary_names": [
+          "in",
+          "out",
+          "benchmark_body"
+        ],
+        "low_quality_0_to_0p1": 69824,
+        "mesh_fingerprint": "9a15efecf1c03b2e3ab99cbd9820138ba91536a6911729671d188a98055eca47",
+        "nBCs": 3,
+        "nElems": 69824,
+        "nNodes": 558592,
+        "nSides": 418944,
+        "negative_scaled_jacobian_elements": 0,
+        "pyhope_version": "1.0.0",
+        "required_boundaries_present": true,
+        "scaled_jacobian_histogram": {
+          "0.0-0.1": 69824,
+          "0.1-0.2": 0,
+          "0.2-0.3": 0,
+          "0.3-0.4": 0,
+          "0.4-0.5": 0,
+          "0.5-0.6": 0,
+          "0.6-0.7": 0,
+          "0.7-0.8": 0,
+          "0.8-0.9": 0,
+          "<0.0": 0,
+          ">0.9-1.0": 0
+        },
+        "valid": true
+      },
+      "reference_area_m2": 0.007853981633974483,
+      "resolution": "fine",
+      "surface": {
+        "analytic_solid_volume_m3": 3.017604463528122e-05,
+        "bounds_max_m": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "bounds_min_m": [
+          2.9391523179536477e-18,
+          -0.05,
+          -0.05
+        ],
+        "checks": {
+          "cavity_aperture_unobstructed": true,
+          "finite": true,
+          "inner_normals_face_cavity": true,
+          "no_duplicate_faces": true,
+          "nondegenerate_triangles": true,
+          "outward_closed_surface_orientation": true,
+          "positive_solid_volume": true,
+          "projected_area_matches_reference": true,
+          "rim_normals_face_aperture": true,
+          "unit_normals": true,
+          "watertight_two_manifold": true
+        },
+        "duplicate_face_count": 0,
+        "euler_characteristic": 2,
+        "n_triangles": 2048,
+        "n_unique_edges": 3072,
+        "n_vertices": 1026,
+        "projected_x_area_m2": 0.007803612880645131,
+        "region_triangle_counts": {
+          "inner": 992,
+          "outer": 992,
+          "rim": 64
+        },
+        "signed_solid_volume_m3": 2.9910334151912988e-05,
+        "surface_area_m2": 0.03066315607979069,
+        "valid": true
+      }
+    },
+    {
+      "geometry": "hemisphere_shell",
+      "gmsh": {
+        "absolute_gas_volume_error_m3": 0.0,
+        "boundary_triangle_counts": {
+          "CYLINDER_HEX": 1152,
+          "IN": 118,
+          "OUT": 594
+        },
+        "checks": {
+          "finite_positive_tetrahedra": true,
+          "gas_volume_within_tolerance": true,
+          "inlet_boundary_present": true,
+          "outlet_boundary_present": true,
+          "spacecraft_boundary_present": true
+        },
+        "expected_gas_volume_m3": 0.1249702950922506,
+        "gas_volume_m3": 0.1249702950922506,
+        "maximum_tetrahedron_volume_m3": 0.0001367418517736889,
+        "mesh_fingerprint": "86dc87a350c4cb4fc07c166de416c6e85b8f10af3948fc9b01f642e3bccda68e",
+        "minimum_tetrahedron_volume_m3": 2.7844621669233274e-09,
+        "n_elements": 8613,
+        "n_nodes": 1589,
+        "n_tetrahedra": 6749,
+        "valid": true
+      },
+      "manifest": "piclas/geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_medium.manifest.json",
+      "piclas_hdf5": {
+        "boundary_names": [
+          "in",
+          "out",
+          "benchmark_body"
+        ],
+        "low_quality_0_to_0p1": 26996,
+        "mesh_fingerprint": "48f9d762b499373328f887e48a05a343e4bc73de426d9efab2ee3a8ebdc9b48f",
+        "nBCs": 3,
+        "nElems": 26996,
+        "nNodes": 215968,
+        "nSides": 161976,
+        "negative_scaled_jacobian_elements": 0,
+        "pyhope_version": "1.0.0",
+        "required_boundaries_present": true,
+        "scaled_jacobian_histogram": {
+          "0.0-0.1": 26996,
+          "0.1-0.2": 0,
+          "0.2-0.3": 0,
+          "0.3-0.4": 0,
+          "0.4-0.5": 0,
+          "0.5-0.6": 0,
+          "0.6-0.7": 0,
+          "0.7-0.8": 0,
+          "0.8-0.9": 0,
+          "<0.0": 0,
+          ">0.9-1.0": 0
+        },
+        "valid": true
+      },
+      "reference_area_m2": 0.007853981633974483,
+      "resolution": "medium",
+      "surface": {
+        "analytic_solid_volume_m3": 3.017604463528122e-05,
+        "bounds_max_m": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "bounds_min_m": [
+          2.9391523179536477e-18,
+          -0.05,
+          -0.05
+        ],
+        "checks": {
+          "cavity_aperture_unobstructed": true,
+          "finite": true,
+          "inner_normals_face_cavity": true,
+          "no_duplicate_faces": true,
+          "nondegenerate_triangles": true,
+          "outward_closed_surface_orientation": true,
+          "positive_solid_volume": true,
+          "projected_area_matches_reference": true,
+          "rim_normals_face_aperture": true,
+          "unit_normals": true,
+          "watertight_two_manifold": true
+        },
+        "duplicate_face_count": 0,
+        "euler_characteristic": 2,
+        "n_triangles": 1152,
+        "n_unique_edges": 1728,
+        "n_vertices": 578,
+        "projected_x_area_m2": 0.007764571353075624,
+        "region_triangle_counts": {
+          "inner": 552,
+          "outer": 552,
+          "rim": 48
+        },
+        "signed_solid_volume_m3": 2.9704907749393925e-05,
+        "surface_area_m2": 0.030556971579591165,
+        "valid": true
+      }
+    },
+    {
+      "geometry": "hemisphere_shell",
+      "gmsh": {
+        "absolute_gas_volume_error_m3": 1.1102230246251565e-16,
+        "boundary_triangle_counts": {
+          "CYLINDER_HEX": 1152,
+          "IN": 246,
+          "OUT": 1230
+        },
+        "checks": {
+          "finite_positive_tetrahedra": true,
+          "gas_volume_within_tolerance": true,
+          "inlet_boundary_present": true,
+          "outlet_boundary_present": true,
+          "spacecraft_boundary_present": true
+        },
+        "expected_gas_volume_m3": 0.9999702950922507,
+        "gas_volume_m3": 0.9999702950922505,
+        "maximum_tetrahedron_volume_m3": 0.0004636909000473048,
+        "mesh_fingerprint": "ecb0dda71bbfa28ab76c9119c8e1d96b8b83ce5bf464afe05d863e984294e73a",
+        "minimum_tetrahedron_volume_m3": 4.618902371877927e-09,
+        "n_elements": 15273,
+        "n_nodes": 2730,
+        "n_tetrahedra": 12645,
+        "valid": true
+      },
+      "manifest": "piclas/geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_medium_large_domain.manifest.json",
+      "piclas_hdf5": {
+        "boundary_names": [
+          "in",
+          "out",
+          "benchmark_body"
+        ],
+        "low_quality_0_to_0p1": 50580,
+        "mesh_fingerprint": "d1413a15c322d9e63ffcaf8148f375e926e9d2e3d940d472cb3a86c8fcf5f884",
+        "nBCs": 3,
+        "nElems": 50580,
+        "nNodes": 404640,
+        "nSides": 303480,
+        "negative_scaled_jacobian_elements": 0,
+        "pyhope_version": "1.0.0",
+        "required_boundaries_present": true,
+        "scaled_jacobian_histogram": {
+          "0.0-0.1": 50580,
+          "0.1-0.2": 0,
+          "0.2-0.3": 0,
+          "0.3-0.4": 0,
+          "0.4-0.5": 0,
+          "0.5-0.6": 0,
+          "0.6-0.7": 0,
+          "0.7-0.8": 0,
+          "0.8-0.9": 0,
+          "<0.0": 0,
+          ">0.9-1.0": 0
+        },
+        "valid": true
+      },
+      "reference_area_m2": 0.007853981633974483,
+      "resolution": "medium_large_domain",
+      "surface": {
+        "analytic_solid_volume_m3": 3.017604463528122e-05,
+        "bounds_max_m": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "bounds_min_m": [
+          2.9391523179536477e-18,
+          -0.05,
+          -0.05
+        ],
+        "checks": {
+          "cavity_aperture_unobstructed": true,
+          "finite": true,
+          "inner_normals_face_cavity": true,
+          "no_duplicate_faces": true,
+          "nondegenerate_triangles": true,
+          "outward_closed_surface_orientation": true,
+          "positive_solid_volume": true,
+          "projected_area_matches_reference": true,
+          "rim_normals_face_aperture": true,
+          "unit_normals": true,
+          "watertight_two_manifold": true
+        },
+        "duplicate_face_count": 0,
+        "euler_characteristic": 2,
+        "n_triangles": 1152,
+        "n_unique_edges": 1728,
+        "n_vertices": 578,
+        "projected_x_area_m2": 0.007764571353075624,
+        "region_triangle_counts": {
+          "inner": 552,
+          "outer": 552,
+          "rim": 48
+        },
+        "signed_solid_volume_m3": 2.9704907749393925e-05,
+        "surface_area_m2": 0.030556971579591165,
+        "valid": true
+      }
+    },
+    {
+      "geometry": "sphere",
+      "gmsh": {
+        "absolute_gas_volume_error_m3": 0.0,
+        "boundary_triangle_counts": {
+          "CYLINDER_HEX": 288,
+          "IN": 66,
+          "OUT": 330
+        },
+        "checks": {
+          "finite_positive_tetrahedra": true,
+          "gas_volume_within_tolerance": true,
+          "inlet_boundary_present": true,
+          "outlet_boundary_present": true,
+          "spacecraft_boundary_present": true
+        },
+        "expected_gas_volume_m3": 0.12450917545136109,
+        "gas_volume_m3": 0.12450917545136109,
+        "maximum_tetrahedron_volume_m3": 0.00031210564247290015,
+        "mesh_fingerprint": "d5096b295d3eb888b2ee30941811962402c47c4201f8427b562d7e47a4461415",
+        "minimum_tetrahedron_volume_m3": 5.464325746867049e-07,
+        "n_elements": 2658,
+        "n_nodes": 507,
+        "n_tetrahedra": 1974,
+        "valid": true
+      },
+      "manifest": "piclas/geometry/paper1/sphere/sphere_d0p1_coarse.manifest.json",
+      "piclas_hdf5": {
+        "boundary_names": [
+          "in",
+          "out",
+          "benchmark_body"
+        ],
+        "low_quality_0_to_0p1": 7896,
+        "mesh_fingerprint": "bd5822913acc6c49c147ce07d8cc4d45f1a8e12dfc3107c69ff9652e96cbc5ef",
+        "nBCs": 3,
+        "nElems": 7896,
+        "nNodes": 63168,
+        "nSides": 47376,
+        "negative_scaled_jacobian_elements": 0,
+        "pyhope_version": "1.0.0",
+        "required_boundaries_present": true,
+        "scaled_jacobian_histogram": {
+          "0.0-0.1": 7896,
+          "0.1-0.2": 0,
+          "0.2-0.3": 0,
+          "0.3-0.4": 0,
+          "0.4-0.5": 0,
+          "0.5-0.6": 0,
+          "0.6-0.7": 0,
+          "0.7-0.8": 0,
+          "0.8-0.9": 0,
+          "<0.0": 0,
+          ">0.9-1.0": 0
+        },
+        "valid": true
+      },
+      "reference_area_m2": 0.007853981633974483,
+      "resolution": "coarse",
+      "surface": {
+        "analytic_solid_volume_m3": 0.0005235987755982989,
+        "bounds_max_m": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "bounds_min_m": [
+          -0.05,
+          -0.05,
+          -0.05
+        ],
+        "checks": {
+          "finite": true,
+          "no_duplicate_faces": true,
+          "nondegenerate_triangles": true,
+          "outward_closed_surface_orientation": true,
+          "positive_solid_volume": true,
+          "projected_area_matches_reference": true,
+          "unit_normals": true,
+          "watertight_two_manifold": true
+        },
+        "duplicate_face_count": 0,
+        "euler_characteristic": 2,
+        "n_triangles": 224,
+        "n_unique_edges": 336,
+        "n_vertices": 114,
+        "projected_x_area_m2": 0.007653668647301796,
+        "region_triangle_counts": {
+          "outer": 224
+        },
+        "signed_solid_volume_m3": 0.0004908245486389091,
+        "surface_area_m2": 0.030416723596385885,
+        "valid": true
+      }
+    },
+    {
+      "geometry": "sphere",
+      "gmsh": {
+        "absolute_gas_volume_error_m3": 0.0,
+        "boundary_triangle_counts": {
+          "CYLINDER_HEX": 1856,
+          "IN": 246,
+          "OUT": 1230
+        },
+        "checks": {
+          "finite_positive_tetrahedra": true,
+          "gas_volume_within_tolerance": true,
+          "inlet_boundary_present": true,
+          "outlet_boundary_present": true,
+          "spacecraft_boundary_present": true
+        },
+        "expected_gas_volume_m3": 0.12448475728240177,
+        "gas_volume_m3": 0.12448475728240177,
+        "maximum_tetrahedron_volume_m3": 5.42649202664174e-05,
+        "mesh_fingerprint": "6f6995ff2737df8a9c22b2ef665e9404384854f1c81829224ee479e3b5feb21e",
+        "minimum_tetrahedron_volume_m3": 1.0709355501386414e-08,
+        "n_elements": 17894,
+        "n_nodes": 3215,
+        "n_tetrahedra": 14562,
+        "valid": true
+      },
+      "manifest": "piclas/geometry/paper1/sphere/sphere_d0p1_fine.manifest.json",
+      "piclas_hdf5": {
+        "boundary_names": [
+          "in",
+          "out",
+          "benchmark_body"
+        ],
+        "low_quality_0_to_0p1": 58248,
+        "mesh_fingerprint": "93d98c25d5c54b313d79e8a7fcbdd85f3f58ad06e7a3d38d75d24cda3d4cda30",
+        "nBCs": 3,
+        "nElems": 58248,
+        "nNodes": 465984,
+        "nSides": 349488,
+        "negative_scaled_jacobian_elements": 0,
+        "pyhope_version": "1.0.0",
+        "required_boundaries_present": true,
+        "scaled_jacobian_histogram": {
+          "0.0-0.1": 58248,
+          "0.1-0.2": 0,
+          "0.2-0.3": 0,
+          "0.3-0.4": 0,
+          "0.4-0.5": 0,
+          "0.5-0.6": 0,
+          "0.6-0.7": 0,
+          "0.7-0.8": 0,
+          "0.8-0.9": 0,
+          "<0.0": 0,
+          ">0.9-1.0": 0
+        },
+        "valid": true
+      },
+      "reference_area_m2": 0.007853981633974483,
+      "resolution": "fine",
+      "surface": {
+        "analytic_solid_volume_m3": 0.0005235987755982989,
+        "bounds_max_m": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "bounds_min_m": [
+          -0.05,
+          -0.05,
+          -0.05
+        ],
+        "checks": {
+          "finite": true,
+          "no_duplicate_faces": true,
+          "nondegenerate_triangles": true,
+          "outward_closed_surface_orientation": true,
+          "positive_solid_volume": true,
+          "projected_area_matches_reference": true,
+          "unit_normals": true,
+          "watertight_two_manifold": true
+        },
+        "duplicate_face_count": 0,
+        "euler_characteristic": 2,
+        "n_triangles": 960,
+        "n_unique_edges": 1440,
+        "n_vertices": 482,
+        "projected_x_area_m2": 0.007803612880645131,
+        "region_triangle_counts": {
+          "outer": 960
+        },
+        "signed_solid_volume_m3": 0.0005152427175982309,
+        "surface_area_m2": 0.03116423522162646,
+        "valid": true
+      }
+    },
+    {
+      "geometry": "sphere",
+      "gmsh": {
+        "absolute_gas_volume_error_m3": 1.3877787807814457e-17,
+        "boundary_triangle_counts": {
+          "CYLINDER_HEX": 912,
+          "IN": 118,
+          "OUT": 594
+        },
+        "checks": {
+          "finite_positive_tetrahedra": true,
+          "gas_volume_within_tolerance": true,
+          "inlet_boundary_present": true,
+          "outlet_boundary_present": true,
+          "spacecraft_boundary_present": true
+        },
+        "expected_gas_volume_m3": 0.12449118095489747,
+        "gas_volume_m3": 0.12449118095489749,
+        "maximum_tetrahedron_volume_m3": 0.00012813173412261355,
+        "mesh_fingerprint": "13277279fc16bbb99bd8b8e79ab2a6d03f287ff248657ddb91af279dff2f89eb",
+        "minimum_tetrahedron_volume_m3": 7.027578211518392e-08,
+        "n_elements": 7524,
+        "n_nodes": 1384,
+        "n_tetrahedra": 5900,
+        "valid": true
+      },
+      "manifest": "piclas/geometry/paper1/sphere/sphere_d0p1_medium.manifest.json",
+      "piclas_hdf5": {
+        "boundary_names": [
+          "in",
+          "out",
+          "benchmark_body"
+        ],
+        "low_quality_0_to_0p1": 23600,
+        "mesh_fingerprint": "b44f34014979542e70e8d938f8cf300734add518d7d63a7bbdf43f39c0d0d480",
+        "nBCs": 3,
+        "nElems": 23600,
+        "nNodes": 188800,
+        "nSides": 141600,
+        "negative_scaled_jacobian_elements": 0,
+        "pyhope_version": "1.0.0",
+        "required_boundaries_present": true,
+        "scaled_jacobian_histogram": {
+          "0.0-0.1": 23600,
+          "0.1-0.2": 0,
+          "0.2-0.3": 0,
+          "0.3-0.4": 0,
+          "0.4-0.5": 0,
+          "0.5-0.6": 0,
+          "0.6-0.7": 0,
+          "0.7-0.8": 0,
+          "0.8-0.9": 0,
+          "<0.0": 0,
+          ">0.9-1.0": 0
+        },
+        "valid": true
+      },
+      "reference_area_m2": 0.007853981633974483,
+      "resolution": "medium",
+      "surface": {
+        "analytic_solid_volume_m3": 0.0005235987755982989,
+        "bounds_max_m": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "bounds_min_m": [
+          -0.05,
+          -0.05,
+          -0.05
+        ],
+        "checks": {
+          "finite": true,
+          "no_duplicate_faces": true,
+          "nondegenerate_triangles": true,
+          "outward_closed_surface_orientation": true,
+          "positive_solid_volume": true,
+          "projected_area_matches_reference": true,
+          "unit_normals": true,
+          "watertight_two_manifold": true
+        },
+        "duplicate_face_count": 0,
+        "euler_characteristic": 2,
+        "n_triangles": 528,
+        "n_unique_edges": 792,
+        "n_vertices": 266,
+        "projected_x_area_m2": 0.007764571353075624,
+        "region_triangle_counts": {
+          "outer": 528
+        },
+        "signed_solid_volume_m3": 0.0005088190451025209,
+        "surface_area_m2": 0.030969353047614424,
+        "valid": true
+      }
+    },
+    {
+      "geometry": "sphere",
+      "gmsh": {
+        "absolute_gas_volume_error_m3": 0.0,
+        "boundary_triangle_counts": {
+          "CYLINDER_HEX": 912,
+          "IN": 246,
+          "OUT": 1230
+        },
+        "checks": {
+          "finite_positive_tetrahedra": true,
+          "gas_volume_within_tolerance": true,
+          "inlet_boundary_present": true,
+          "outlet_boundary_present": true,
+          "spacecraft_boundary_present": true
+        },
+        "expected_gas_volume_m3": 0.9994911809548975,
+        "gas_volume_m3": 0.9994911809548975,
+        "maximum_tetrahedron_volume_m3": 0.00046703955200665153,
+        "mesh_fingerprint": "d31a7eb283fea4085239e3bf702e12c619aae3061047a87c0c8b80c802c4f175",
+        "minimum_tetrahedron_volume_m3": 8.10377310646612e-08,
+        "n_elements": 13718,
+        "n_nodes": 2461,
+        "n_tetrahedra": 11330,
+        "valid": true
+      },
+      "manifest": "piclas/geometry/paper1/sphere/sphere_d0p1_medium_large_domain.manifest.json",
+      "piclas_hdf5": {
+        "boundary_names": [
+          "in",
+          "out",
+          "benchmark_body"
+        ],
+        "low_quality_0_to_0p1": 45320,
+        "mesh_fingerprint": "253bf02685842ccaf7c285bb134d48ab70910811d862672a9a964b09d42e8709",
+        "nBCs": 3,
+        "nElems": 45320,
+        "nNodes": 362560,
+        "nSides": 271920,
+        "negative_scaled_jacobian_elements": 0,
+        "pyhope_version": "1.0.0",
+        "required_boundaries_present": true,
+        "scaled_jacobian_histogram": {
+          "0.0-0.1": 45320,
+          "0.1-0.2": 0,
+          "0.2-0.3": 0,
+          "0.3-0.4": 0,
+          "0.4-0.5": 0,
+          "0.5-0.6": 0,
+          "0.6-0.7": 0,
+          "0.7-0.8": 0,
+          "0.8-0.9": 0,
+          "<0.0": 0,
+          ">0.9-1.0": 0
+        },
+        "valid": true
+      },
+      "reference_area_m2": 0.007853981633974483,
+      "resolution": "medium_large_domain",
+      "surface": {
+        "analytic_solid_volume_m3": 0.0005235987755982989,
+        "bounds_max_m": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "bounds_min_m": [
+          -0.05,
+          -0.05,
+          -0.05
+        ],
+        "checks": {
+          "finite": true,
+          "no_duplicate_faces": true,
+          "nondegenerate_triangles": true,
+          "outward_closed_surface_orientation": true,
+          "positive_solid_volume": true,
+          "projected_area_matches_reference": true,
+          "unit_normals": true,
+          "watertight_two_manifold": true
+        },
+        "duplicate_face_count": 0,
+        "euler_characteristic": 2,
+        "n_triangles": 528,
+        "n_unique_edges": 792,
+        "n_vertices": 266,
+        "projected_x_area_m2": 0.007764571353075624,
+        "region_triangle_counts": {
+          "outer": 528
+        },
+        "signed_solid_volume_m3": 0.0005088190451025209,
+        "surface_area_m2": 0.030969353047614424,
+        "valid": true
+      }
+    }
+  ],
+  "schema_version": 1,
+  "status_definitions": {
+    "prepared": "files generated",
+    "simulation_verified": "requires future PICLas/ADBSat runs",
+    "statically_validated": "structural checks only"
+  }
+}

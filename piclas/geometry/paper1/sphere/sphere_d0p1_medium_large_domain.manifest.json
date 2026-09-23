@@ -1,0 +1,138 @@
+{
+  "assets": {
+    "adbsat_mat": "sphere_d0p1_medium_large_domain.mat",
+    "adbsat_obj": "sphere_d0p1_medium_large_domain.obj",
+    "canonical_surface_npz": "sphere_d0p1_medium_large_domain.surface.npz",
+    "gmsh_exterior_geo": "sphere_d0p1_medium_large_domain.exterior.geo",
+    "gmsh_exterior_msh": "sphere_d0p1_medium_large_domain.exterior.msh",
+    "piclas_volume_mesh": "sphere_d0p1_medium_large_domain_mesh.h5",
+    "pyhope_config": "sphere_d0p1_medium_large_domain.pyhope.ini",
+    "surface_stl": "sphere_d0p1_medium_large_domain.stl"
+  },
+  "characteristic_length_m": 0.1,
+  "coordinate_system": {
+    "nominal_molecular_velocity": "+x",
+    "origin": "sphere/shell center",
+    "transverse_axes": [
+      "y",
+      "z"
+    ]
+  },
+  "diameter_m": 0.1,
+  "fingerprint": "1056db6f7d6512d9862f57acbfc394fcd1664141e3cc4e2ed4e908f5570a7efe",
+  "generator": "mfmc-paper1-benchmark",
+  "generator_version": "1.0.0",
+  "geometry_id": "sphere_d0p1",
+  "geometry_kind": "sphere",
+  "gmsh_validation": {
+    "absolute_gas_volume_error_m3": 0.0,
+    "boundary_triangle_counts": {
+      "CYLINDER_HEX": 912,
+      "IN": 246,
+      "OUT": 1230
+    },
+    "checks": {
+      "finite_positive_tetrahedra": true,
+      "gas_volume_within_tolerance": true,
+      "inlet_boundary_present": true,
+      "outlet_boundary_present": true,
+      "spacecraft_boundary_present": true
+    },
+    "expected_gas_volume_m3": 0.9994911809548975,
+    "gas_volume_m3": 0.9994911809548975,
+    "maximum_tetrahedron_volume_m3": 0.00046703955200665153,
+    "mesh_fingerprint": "d31a7eb283fea4085239e3bf702e12c619aae3061047a87c0c8b80c802c4f175",
+    "minimum_tetrahedron_volume_m3": 8.10377310646612e-08,
+    "n_elements": 13718,
+    "n_nodes": 2461,
+    "n_tetrahedra": 11330,
+    "valid": true
+  },
+  "mesh_controls": {
+    "body_mesh_size_m": 0.015,
+    "domain_half_extent_in_diameters": 5.0,
+    "expected_gas_volume_m3": 0.9994911809548975,
+    "farfield_mesh_size_m": 0.1
+  },
+  "nominal_orientation": "orientation-invariant",
+  "opening_normal": null,
+  "piclas_boundary_mapping": {
+    "BENCHMARK_BODY": "reflective spacecraft wall",
+    "IN": "open/inflow",
+    "OUT": "open/outflow"
+  },
+  "pyhope_validation": {
+    "boundary_names": [
+      "in",
+      "out",
+      "benchmark_body"
+    ],
+    "low_quality_0_to_0p1": 45320,
+    "mesh_fingerprint": "253bf02685842ccaf7c285bb134d48ab70910811d862672a9a964b09d42e8709",
+    "nBCs": 3,
+    "nElems": 45320,
+    "nNodes": 362560,
+    "nSides": 271920,
+    "negative_scaled_jacobian_elements": 0,
+    "pyhope_version": "1.0.0",
+    "required_boundaries_present": true,
+    "scaled_jacobian_histogram": {
+      "0.0-0.1": 45320,
+      "0.1-0.2": 0,
+      "0.2-0.3": 0,
+      "0.3-0.4": 0,
+      "0.4-0.5": 0,
+      "0.5-0.6": 0,
+      "0.6-0.7": 0,
+      "0.7-0.8": 0,
+      "0.8-0.9": 0,
+      "<0.0": 0,
+      ">0.9-1.0": 0
+    },
+    "valid": true
+  },
+  "reference_area_convention": "pi*D^2/4, projected normal to body x-axis",
+  "reference_area_m2": 0.007853981633974483,
+  "resolution": "medium_large_domain",
+  "schema_version": 1,
+  "status": "surface_and_volume_statically_validated; solver_not_run",
+  "surface_regions": {
+    "1": "outer"
+  },
+  "surface_validation": {
+    "analytic_solid_volume_m3": 0.0005235987755982989,
+    "bounds_max_m": [
+      0.05,
+      0.05,
+      0.05
+    ],
+    "bounds_min_m": [
+      -0.05,
+      -0.05,
+      -0.05
+    ],
+    "checks": {
+      "finite": true,
+      "no_duplicate_faces": true,
+      "nondegenerate_triangles": true,
+      "outward_closed_surface_orientation": true,
+      "positive_solid_volume": true,
+      "projected_area_matches_reference": true,
+      "unit_normals": true,
+      "watertight_two_manifold": true
+    },
+    "duplicate_face_count": 0,
+    "euler_characteristic": 2,
+    "n_triangles": 528,
+    "n_unique_edges": 792,
+    "n_vertices": 266,
+    "projected_x_area_m2": 0.007764571353075624,
+    "region_triangle_counts": {
+      "outer": 528
+    },
+    "signed_solid_volume_m3": 0.0005088190451025209,
+    "surface_area_m2": 0.030969353047614424,
+    "valid": true
+  },
+  "units": "m"
+}

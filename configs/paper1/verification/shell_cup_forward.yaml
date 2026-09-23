@@ -1,0 +1,165 @@
+study:
+  id: paper1_verify_shell_cup_forward
+  mode: baseline
+  active_source_blocks:
+  - gsi.energy_accommodation
+  - gsi.surface_temperature
+  notes: Preparation only; no solver run has been performed.
+  model_hierarchy: PICLas DSMC (HF); PICLas TPMC and ADBSat Sentman (LF controls)
+sources:
+  blocks:
+  - name: gsi.energy_accommodation
+  - name: gsi.surface_temperature
+geometries:
+- id: HemisphereShell_P1
+  name: HemisphereShell_P1
+  characteristic_length: 0.1
+  geometry_class: concave_shell
+  metadata:
+    hf_mesh: geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_medium_mesh.h5
+    piclas_object_boundary_name: BENCHMARK_BODY
+    lf_model: HemisphereShell_P1
+    reference_area_m2: 0.007853981633974483
+    reference_area_source: paper1_projected_area
+regimes:
+- id: SHELL_CUP_FORWARD
+  label: Deterministic collisionless atomic-oxygen verification
+  descriptors:
+    altitude_km: 300.0
+    characteristic_length: 0.1
+    knudsen_number: 3784.57
+    knudsen_definition: 'provisional hard-sphere proxy: lambda=(sqrt(2)*pi*d_eff^2*n_total)^-1,
+      d_eff=3.7e-10 m, first bundled CSV row'
+    density_kg_m3: 2.65669645265334e-11
+    number_density_m3: 1000000000000000.0
+    freestream_temperature: 1000.0
+    composition_descriptor: O=1.0,N2=0.0,O2=0.0,He=0.0
+    datetime_utc: '2013-10-21T00:00:00Z'
+    lat_deg: 0.0
+    lon_deg: 0.0
+    f107: 130.0
+    f107a: 130.0
+    ap: 18.0
+    geometry_class: concave_shell
+    surface_state: fully_diffuse_full_thermal_accommodation
+    speed_ratio: 8.0
+    solar_activity_state: F10.7=F10.7a=130 sfu
+    geomagnetic_activity_state: Ap=18
+    wind_state: zero
+    relative_speed_mps: 7500.0
+variables:
+- name: energy_accommodation
+  source_block: gsi.energy_accommodation
+  distribution:
+    kind: fixed
+    params:
+      value: 1.0
+  baseline: 1.0
+  bounds:
+  - 0.0
+  - 1.0
+- name: wall_temperature_k
+  source_block: gsi.surface_temperature
+  distribution:
+    kind: fixed
+    params:
+      value: 300.0
+  baseline: 300.0
+  bounds:
+  - 250.0
+  - 400.0
+sampling:
+  method: independent
+  sample_count: 1
+  max_production_samples: 1
+models:
+  hf:
+    id: PICLas_DSMC
+    kind: legacy_piclas
+    kwargs:
+      simulator_module: PICLas_prandtl
+      mpi_procs: 64
+      piclas_mode: dsmc
+      collision_mode: 0
+      calc_quality_factors: false
+  lf:
+  - id: PICLas_TPMC
+    kind: legacy_piclas_tpmc
+    kwargs:
+      simulator_module: PICLas_prandtl
+      mpi_procs: 64
+  - id: Sentman
+    kind: legacy_adbsat
+    method: Sentman
+    kwargs:
+      simulator_module: ADBSat_prandtl
+      base_dir: ADBSat-PyVersion
+  available_qois:
+    PICLas_DSMC:
+    - C_D
+    - C_D2
+    PICLas_TPMC:
+    - C_D
+    - C_D2
+    Sentman:
+    - C_D
+    - C_D2
+qois:
+  direct:
+  - C_D
+  - C_D2
+  derived:
+  - name: Var_C_D
+    expression: E[C_D2]-E[C_D]^2
+  batch_cd_cd2: true
+  single_allocation_all_qois: true
+pilot:
+  size: 1
+  sizes:
+  - 1
+  robustness_repetitions: 1
+  reuse_across_budgets: true
+budget:
+  total:
+  - 1.0
+  min_hf: 1
+  hf_fraction: 1.0
+repetitions: 1
+seeds:
+  global: 20260923
+outputs:
+  dir: campaign_outputs/paper1/verification/shell_cup_forward
+  write_parquet: false
+  write_model_evaluations: true
+  write_config_snapshot: true
+  plots: false
+execution:
+  backend: legacy_slurm
+  resume: false
+  aos_deg: 0.0
+  aoa_deg: 0.0
+  flow_zero_direction:
+  - 1.0
+  - 0.0
+  - 0.0
+  environment:
+    model: csv
+    atmosphere_row:
+    - 2.65669645265334e-11
+    - 0.0
+    - 0.0
+    - 1000000000000000.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1000.0
+    relative_speed_mps: 7500.0
+    wind_enu_mps:
+    - 0.0
+    - 0.0
+    - 0.0
+    use_winds: false
+    apply_wind_to_speed: false
