@@ -537,9 +537,9 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
     def test_piclas_collect_results_qois_from_vector_force(self):
         force_per_area = np.asarray([[0.0, -1.0, 0.5], [0.0, -2.0, 1.5]], dtype=float)
         centers = np.asarray([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], dtype=float)
-        expected_drag_pressure = 3.0
-        expected_lift_pressure = 2.0
-        expected_moment_pressure = np.asarray([1.0, -0.25, -0.5], dtype=float)
+        expected_drag_coefficient = 1.5
+        expected_lift_coefficient = 1.0
+        expected_moment_coefficient = np.asarray([0.5, -0.125, -0.25], dtype=float)
 
         with tempfile.TemporaryDirectory() as td:
             for name in ["output1.vtu", "output2.vtu", "output3.vtu", "output4.vtu"]:
@@ -555,13 +555,13 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             ):
                 qois, cpu_h = sim.collect_results_qois([td], AoS=[0.0], AoA=[0.0])
 
-        self.assertNotIn("C_D", qois)
-        self.assertAlmostEqual(expected_drag_pressure, qois["P_D"][0], places=12)
-        self.assertAlmostEqual(expected_drag_pressure**2, qois["P_D2"][0], places=12)
-        self.assertAlmostEqual(expected_lift_pressure, qois["P_L"][0], places=12)
-        self.assertAlmostEqual(expected_moment_pressure[0], qois["P_Mx"][0], places=12)
-        self.assertAlmostEqual(expected_moment_pressure[1], qois["P_My"][0], places=12)
-        self.assertAlmostEqual(expected_moment_pressure[2], qois["P_Mz"][0], places=12)
+        self.assertNotIn("P_D", qois)
+        self.assertAlmostEqual(expected_drag_coefficient, qois["C_D"][0], places=12)
+        self.assertAlmostEqual(expected_drag_coefficient**2, qois["C_D2"][0], places=12)
+        self.assertAlmostEqual(expected_lift_coefficient, qois["C_L"][0], places=12)
+        self.assertAlmostEqual(expected_moment_coefficient[0], qois["C_Mx"][0], places=12)
+        self.assertAlmostEqual(expected_moment_coefficient[1], qois["C_My"][0], places=12)
+        self.assertAlmostEqual(expected_moment_coefficient[2], qois["C_Mz"][0], places=12)
         self.assertEqual([4.0], cpu_h)
 
     def test_prandtl_piclas_collect_results_qois_uses_wetted_area_for_moment_length(self):
@@ -587,13 +587,13 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             ):
                 qois, cpu_h = sim.collect_results_qois([td], AoS=[0.0], AoA=[0.0])
 
-        self.assertAlmostEqual(qois["P_D"][0] / 2.0, qois["C_D"][0], places=12)
-        self.assertAlmostEqual(qois["P_Y"][0] / 2.0, qois["C_Y"][0], places=12)
+        self.assertAlmostEqual(1.5, qois["C_D"][0], places=12)
+        self.assertAlmostEqual(0.0, qois["C_Y"][0], places=12)
         self.assertAlmostEqual(qois["C_Y"][0] ** 2, qois["C_Y2"][0], places=12)
-        self.assertNotIn("C_Mx", qois)
-        self.assertAlmostEqual(2.0, qois["P_Mx"][0], places=12)
-        self.assertAlmostEqual(-0.5, qois["P_My"][0], places=12)
-        self.assertAlmostEqual(-1.0, qois["P_Mz"][0], places=12)
+        self.assertNotIn("P_Mx", qois)
+        self.assertAlmostEqual(0.5, qois["C_Mx"][0], places=12)
+        self.assertAlmostEqual(-0.125, qois["C_My"][0], places=12)
+        self.assertAlmostEqual(-0.25, qois["C_Mz"][0], places=12)
         self.assertEqual([4.0], cpu_h)
 
     def test_prepare_simulation_folder_uses_geometry_specific_mesh_and_project(self):

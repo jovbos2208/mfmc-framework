@@ -950,10 +950,9 @@ def parallel_run(param_list, altitude, aos_deg, adbsat_path, num_workers=32):
     with multiprocessing.Pool(processes=num_workers) as pool:
         results = pool.starmap(run_simulation, job_args)
 
-    # Store area-normalized loads (pressures) rather than dimensionless coefficients.
     output_file = "all_results.txt"
     with open(output_file, "w") as f:
-        f.write("gsi_model idx P_D P_L P_Y P_Mx P_My P_Mz q_inf cpu_time_ms\n")
+        f.write("gsi_model idx C_D C_L C_Y C_Mx C_My C_Mz cpu_time_ms\n")
         for item, (coeffs, cpu_time) in zip(param_list, results):
             gsi_model, run_id = item[0], item[1]
             if not isinstance(coeffs, dict):
@@ -966,29 +965,14 @@ def parallel_run(param_list, altitude, aos_deg, adbsat_path, num_workers=32):
                     "C_My": float("nan"),
                     "C_Mz": float("nan"),
                 }
-            q_inf = float(coeffs.get("q_inf", float("nan")))
-            if not np.isfinite(q_inf) or q_inf <= 0.0:
-                raise ValueError(
-                    f"Missing or non-positive dynamic pressure for ADBSat pressure output: "
-                    f"gsi_model={gsi_model}, run_id={run_id}"
-                )
-            pressure = {
-                "P_D": float(coeffs.get("C_D", float("nan"))) * q_inf,
-                "P_L": float(coeffs.get("C_L", float("nan"))) * q_inf,
-                "P_Y": float(coeffs.get("C_Y", float("nan"))) * q_inf,
-                "P_Mx": float(coeffs.get("C_Mx", float("nan"))) * q_inf,
-                "P_My": float(coeffs.get("C_My", float("nan"))) * q_inf,
-                "P_Mz": float(coeffs.get("C_Mz", float("nan"))) * q_inf,
-            }
             f.write(
                 f"{gsi_model} {run_id} "
-                f"{pressure['P_D']} "
-                f"{pressure['P_L']} "
-                f"{pressure['P_Y']} "
-                f"{pressure['P_Mx']} "
-                f"{pressure['P_My']} "
-                f"{pressure['P_Mz']} "
-                f"{q_inf} "
+                f"{coeffs.get('C_D', float('nan'))} "
+                f"{coeffs.get('C_L', float('nan'))} "
+                f"{coeffs.get('C_Y', float('nan'))} "
+                f"{coeffs.get('C_Mx', float('nan'))} "
+                f"{coeffs.get('C_My', float('nan'))} "
+                f"{coeffs.get('C_Mz', float('nan'))} "
                 f"{cpu_time:.2f}\n"
             )
 

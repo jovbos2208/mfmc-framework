@@ -13,8 +13,8 @@ def _mat_scalar(value):
     return float(np.asarray(arr, dtype=float).reshape(-1)[0])
 
 
-def _reference_area(param_eq, projected_area):
-    """Use a campaign-provided canonical area, with legacy projection fallback."""
+def _reference_area(param_eq, half_total_area):
+    """Use a campaign-provided canonical area, with half-total-area fallback."""
     configured = param_eq.get("reference_area_m2")
     try:
         configured = float(configured)
@@ -22,7 +22,7 @@ def _reference_area(param_eq, projected_area):
         configured = float("nan")
     if np.isfinite(configured) and configured > 0.0:
         return configured, str(param_eq.get("reference_area_source", "campaign_payload"))
-    return max(float(projected_area), 1e-12), "adbsat_wind_projected"
+    return max(float(half_total_area), 1e-12), "half_total_surface"
 
 
 def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
@@ -157,13 +157,12 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
             # =================================================================
             # 3.8) ***Global*** force & moment coefficients (NEW)
             # =================================================================
-            # Use the same wind-projected reference area convention as the
-            # PICLas postprocessor: 0.5 * sum(|n_i . flow| * A_i).
+            # Use half the total wetted surface, matching the PICLas wrapper.
             area_proj = 0.5 * np.abs(areas * np.cos(delta))
             
             area_total = float(np.sum(areas))
             area_proj_total = float(np.sum(area_proj))
-            area_ref, area_ref_source = _reference_area(param_eq, area_proj_total)
+            area_ref, area_ref_source = _reference_area(param_eq, 0.5 * area_total)
 
             # --- shear direction ------------------------------------------------
             tau_dir = np.cross(surfN.T, np.cross(v_matrix.T, surfN.T)).T  # 3×N

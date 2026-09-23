@@ -1126,17 +1126,18 @@ class PiclasSimulator:
     def collect_results(self, job_subdirs):
         """
         Liefert für jedes Unterverzeichnis
-            • globalen mittleren Druck P_D in Pa (Bezug A_ref)
+            • globalen aerodynamischen Widerstandskoeffizienten C_D
             • CPU-Stunden
         -------------------------------------------------------------------------
         Rückgabe
         --------
-        global_pressure_list : list[float]   # mittlerer Druck P_D [Pa] (pro Job)
+        global_pressure_list : list[float]   # C_D (pro Job)
         cpu_hours_list  : list[float]   # Laufzeit in Stunden (pro Job)
         """
         global_pressure_list, cpu_hours_list = [], []
 
         for subdir in job_subdirs:
+            dyn_p = float(np.loadtxt(os.path.join(subdir, "dyn_p.txt")))
             # ---------------------------------------------------------------------
             # Zellflächen & Referenzfläche einmal aus *einem* VTU einlesen
             # (wir nehmen das erste verfügbare VTU)
@@ -1146,8 +1147,7 @@ class PiclasSimulator:
                 raise FileNotFoundError(f"Keine output*.vtu Dateien gefunden in {subdir}")
             area_file = output_files[0]
             areas, A_wetted = cell_areas_and_total(area_file)
-            flow_dir, _, _ = _force_frame_axes(0.0, 0.0, self.flow_zero_direction)
-            A_ref = wind_projected_reference_area(area_file, flow_dir, areas)
+            A_ref = 0.5 * A_wetted
 
 
             # Listen für die einzelnen Zeitschritte
@@ -1161,23 +1161,16 @@ class PiclasSimulator:
                 # Total_ForcePerArea kann in cell_data *oder* point_data liegen.
                 #   • wenn Vektor -> Betrag
                 # --------------------------------------------------------------
-                if "Total_ForcePerArea" in mesh.cell_data_dict:
-                    # mesh.cell_data_dict[celltype] → ndarray(n_cells, 3|1)
-                    cell_force = next(iter(mesh.cell_data_dict["Total_ForcePerArea"]))
-                elif "Total_ForcePerArea" in mesh.point_data:
-                    cell_force = mesh.point_data["Total_ForcePerArea"]
-                else:
-                    raise KeyError(f"Total_ForcePerArea nicht gefunden in {fpath}")
-
-                cell_force = np.asarray(cell_force)
-                if cell_force.ndim == 2:               # Vektorfeld → Norm
+                cell_force = _extract_force_per_area_cell(mesh)
+                if cell_force.shape[1] > 1:
                     cell_force = np.linalg.norm(cell_force, axis=1)
+                else:
+                    cell_force = cell_force[:, 0]
 
                 if cell_force.size != areas.size:
                     raise ValueError(f"Zellzahl passt nicht zu Flächen in {fpath}")
 
-                # Resultierende Kraft, bezogen auf die Referenzfläche [Pa].
-                pressures.append(float(np.sum(cell_force * areas) / A_ref))
+                pressures.append(float(np.sum(cell_force * areas) / (dyn_p * A_ref)))
 
             # Mittel über alle Zeitschritte dieses Jobs
             global_pressure_list.append(float(np.mean(pressures)))
@@ -1193,25 +1186,19 @@ class PiclasSimulator:
 
     def collect_results_qois(self, job_subdirs, AoS, AoA=0.0, flow_zero_direction=None):
         """
-        Collect drag, lift, side-force, and moment pressures in Pa.
-        P_L/P_Y/P_M* may be NaN for scalar-only solver output.
+        Collect dimensionless drag, lift, side-force, and moment coefficients.
+        C_L/C_Y/C_M* may be NaN for scalar-only solver output.
         """
         qoi_values = {
-            "P_D": [],
-            "P_D2": [],
-            "P_L": [],
-            "P_L2": [],
-            "P_Y": [],
-            "P_Y2": [],
-            "P_Mx": [],
-            "P_My": [],
-            "P_Mz": [],
+            "C_D": [], "C_D2": [], "C_L": [], "C_L2": [],
+            "C_Y": [], "C_Y2": [], "C_Mx": [], "C_My": [], "C_Mz": [],
         }
         cpu_hours_list = []
         aos_values = _expand_values(AoS, len(job_subdirs), 0.0)
         aoa_values = _expand_values(AoA, len(job_subdirs), 0.0)
 
         for idx, subdir in enumerate(job_subdirs):
+            dyn_p = float(np.loadtxt(os.path.join(subdir, "dyn_p.txt")))
             active_zero = flow_zero_direction if flow_zero_direction is not None else self.flow_zero_direction
             flow_dir, side_dir, lift_dir = _force_frame_axes(float(aos_values[idx]), float(aoa_values[idx]), active_zero)
             output_files = self._output_vtu_files(subdir)
@@ -1219,9 +1206,9 @@ class PiclasSimulator:
                 raise FileNotFoundError(f"Keine output*.vtu Dateien gefunden in {subdir}")
             area_file = output_files[0]
             areas, A_wetted = cell_areas_and_total(area_file)
-            A_ref = wind_projected_reference_area(area_file, flow_dir, areas)
-            # Preserve the established moment convention while drag/lift use
-            # the wind-projected reference area.
+            A_ref = 0.5 * A_wetted
+            # Preserve the established moment length while all loads use
+            # half the total wetted surface as reference area.
             L_ref = float(np.sqrt(max(A_wetted, 1e-12)))
 
             drag_pressures, lift_pressures, side_pressures = [], [], []
@@ -1237,7 +1224,7 @@ class PiclasSimulator:
                 # Scalar force fallback: drag-only.
                 if force_pa.shape[1] == 1:
                     scalar_f = force_pa[:, 0]
-                    drag_pressure = float(abs(np.sum(scalar_f * areas) / A_ref))
+                    drag_pressure = float(abs(np.sum(scalar_f * areas) / (dyn_p * A_ref)))
                     lift_pressure = float("nan")
                     side_pressure = float("nan")
                     moment_pressure_vec = np.array([float("nan"), float("nan"), float("nan")])
@@ -1245,7 +1232,7 @@ class PiclasSimulator:
                     # Vector force integration.
                     force_vec = force_pa[:, :3]
                     total_force = np.sum(force_vec * areas.reshape(-1, 1), axis=0)
-                    pressure_vec = total_force / A_ref
+                    pressure_vec = total_force / (dyn_p * A_ref)
 
                     # Drag is opposite freestream; lift along lift axis.
                     drag_pressure = float(abs(-np.dot(pressure_vec, flow_dir)))
@@ -1254,7 +1241,7 @@ class PiclasSimulator:
 
                     centers = mesh.cell_centers().points
                     moments = np.sum(np.cross(centers, force_vec * areas.reshape(-1, 1)), axis=0)
-                    moment_pressure_vec = moments / (A_ref * L_ref)
+                    moment_pressure_vec = moments / (dyn_p * A_ref * L_ref)
 
                 drag_pressures.append(drag_pressure)
                 lift_pressures.append(lift_pressure)
@@ -1270,15 +1257,15 @@ class PiclasSimulator:
             pmy_mean = float(np.mean(moment_pressures_y))
             pmz_mean = float(np.mean(moment_pressures_z))
 
-            qoi_values["P_D"].append(pd_mean)
-            qoi_values["P_D2"].append(pd_mean * pd_mean if np.isfinite(pd_mean) else float("nan"))
-            qoi_values["P_L"].append(pl_mean)
-            qoi_values["P_L2"].append(pl_mean * pl_mean if np.isfinite(pl_mean) else float("nan"))
-            qoi_values["P_Y"].append(py_mean)
-            qoi_values["P_Y2"].append(py_mean * py_mean if np.isfinite(py_mean) else float("nan"))
-            qoi_values["P_Mx"].append(pmx_mean)
-            qoi_values["P_My"].append(pmy_mean)
-            qoi_values["P_Mz"].append(pmz_mean)
+            qoi_values["C_D"].append(pd_mean)
+            qoi_values["C_D2"].append(pd_mean * pd_mean if np.isfinite(pd_mean) else float("nan"))
+            qoi_values["C_L"].append(pl_mean)
+            qoi_values["C_L2"].append(pl_mean * pl_mean if np.isfinite(pl_mean) else float("nan"))
+            qoi_values["C_Y"].append(py_mean)
+            qoi_values["C_Y2"].append(py_mean * py_mean if np.isfinite(py_mean) else float("nan"))
+            qoi_values["C_Mx"].append(pmx_mean)
+            qoi_values["C_My"].append(pmy_mean)
+            qoi_values["C_Mz"].append(pmz_mean)
 
             with open(os.path.join(subdir, "cpu_time.txt")) as f:
                 cpu_time_ms = float(f.read().strip())

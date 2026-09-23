@@ -20,7 +20,7 @@ def test_campaign_reference_area_overrides_attitude_dependent_projection() -> No
     assert source == "explicit_payload"
 
 
-def test_reference_area_falls_back_for_legacy_calls() -> None:
-    area, source = _reference_area({}, projected_area=0.0024)
+def test_reference_area_falls_back_to_half_total_surface() -> None:
+    area, source = _reference_area({}, half_total_area=0.0024)
     assert area == 0.0024
-    assert source == "adbsat_wind_projected"
+    assert source == "half_total_surface"

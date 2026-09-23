@@ -7,11 +7,11 @@ import sys
 import numpy as np
 
 
-PRESSURE_QOIS = ("P_D", "P_L", "P_Y", "P_Mx", "P_My", "P_Mz")
+COEFFICIENT_QOIS = ("C_D", "C_L", "C_Y", "C_Mx", "C_My", "C_Mz")
 
 
-def _pressure_result_row(header_tokens, parts):
-    """Parse one ADBSat row and return area-normalized loads in Pa."""
+def _coefficient_result_row(header_tokens, parts):
+    """Parse one ADBSat row and return dimensionless aerodynamic coefficients."""
     columns = {name: pos for pos, name in enumerate(header_tokens)}
 
     def _column(name, default=float("nan")):
@@ -23,39 +23,12 @@ def _pressure_result_row(header_tokens, parts):
         except (TypeError, ValueError):
             return default
 
-    pressure_values = {name: _column(name) for name in PRESSURE_QOIS}
-    q_inf = _column("q_inf")
-    if not np.isfinite(pressure_values["P_D"]):
-        if not np.isfinite(q_inf) or q_inf <= 0.0:
-            raise ValueError(
-                "ADBSat result row contains aerodynamic coefficients but no positive q_inf; "
-                "pressure in Pa cannot be reconstructed. Re-run the simulation with the pressure output format."
-            )
-        coefficient_names = ("C_D", "C_L", "C_Y", "C_Mx", "C_My", "C_Mz")
-        pressure_values = {
-            pressure_name: _column(coefficient_name) * q_inf
-            for pressure_name, coefficient_name in zip(PRESSURE_QOIS, coefficient_names)
-        }
-
-    pressure_values["P_D2"] = pressure_values["P_D"] ** 2
-    pressure_values["P_L2"] = pressure_values["P_L"] ** 2
-    pressure_values["P_Y2"] = pressure_values["P_Y"] ** 2
-    coefficient_values = {}
-    for pressure_name, coefficient_name in zip(
-        PRESSURE_QOIS,
-        ("C_D", "C_L", "C_Y", "C_Mx", "C_My", "C_Mz"),
-    ):
-        coefficient_values[coefficient_name] = (
-            pressure_values[pressure_name] / q_inf
-            if np.isfinite(q_inf) and q_inf > 0.0
-            else float("nan")
-        )
+    coefficient_values = {name: _column(name) for name in COEFFICIENT_QOIS}
     coefficient_values["C_D2"] = coefficient_values["C_D"] ** 2
     coefficient_values["C_L2"] = coefficient_values["C_L"] ** 2
     coefficient_values["C_Y2"] = coefficient_values["C_Y"] ** 2
-    pressure_values.update(coefficient_values)
     cpu_time_ms = _column("cpu_time_ms")
-    return pressure_values, cpu_time_ms
+    return coefficient_values, cpu_time_ms
 
 
 def wind_projected_reference_area_from_obj(obj_file: str, flow_dir: np.ndarray, scale_to_m: float = 1.0) -> float:
@@ -198,7 +171,7 @@ class ADBSatSimulator:
 
     def analyze_simulation_results(self, indices):
         """
-        Liest `all_results.txt` und gibt P_D [Pa] und CPU-Zeiten zurück.
+        Liest `all_results.txt` und gibt C_D und CPU-Zeiten zurück.
         """
         result_file = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}", "all_results.txt")
         if not os.path.exists(result_file):
@@ -225,30 +198,30 @@ class ADBSatSimulator:
             if gsi_model != self.method or idx not in indices_set:
                 continue
 
-            qoi_map, cpu_time = _pressure_result_row(header_tokens, parts)
-            pressure_value = float(qoi_map["P_D"])
-            if not np.isfinite(pressure_value):
+            qoi_map, cpu_time = _coefficient_result_row(header_tokens, parts)
+            coefficient_value = float(qoi_map["C_D"])
+            if not np.isfinite(coefficient_value):
                 raise ValueError(
-                    f"Non-finite ADBSat P_D for method={self.method}, idx={idx} in {result_file}. "
+                    f"Non-finite ADBSat C_D for method={self.method}, idx={idx} in {result_file}. "
                     f"Raw line: {line.strip()}"
                 )
 
             idx_array.append(int(float(idx)))
-            Fd_values.append(pressure_value)
+            Fd_values.append(coefficient_value)
             cpu_times.append(float(cpu_time) / 3600000.0)  # ms → h
 
         return np.array(Fd_values), np.array(cpu_times), np.array(idx_array)
 
     def analyze_simulation_results_qois(self, indices, requested_qois=None):
         """
-        Read all_results.txt and return requested pressure QoIs in Pa.
+        Read all_results.txt and return requested aerodynamic coefficient QoIs.
         Returns:
             values_by_qoi: dict[str, np.ndarray]
             cpu_times_h: np.ndarray
             idx_array: np.ndarray
         """
         if requested_qois is None:
-            requested_qois = ["P_D"]
+            requested_qois = ["C_D"]
 
         result_file = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}", "all_results.txt")
         if not os.path.exists(result_file):
@@ -281,7 +254,7 @@ class ADBSatSimulator:
             if gsi_model != self.method or idx not in indices_set:
                 continue
 
-            qoi_map, cpu_time = _pressure_result_row(header_tokens, parts)
+            qoi_map, cpu_time = _coefficient_result_row(header_tokens, parts)
 
             bad_qois = [
                 q for q in requested_qois
