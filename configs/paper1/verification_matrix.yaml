@@ -86,7 +86,7 @@ gsi_mapping:
   shared_sample: energy_accommodation alpha and wall_temperature_k
   PICLas_DSMC_and_TPMC:
     TransACC: alpha
-    MomentumACC: alpha^2 unless independently sampled
+    MomentumACC: 1.0 (fixed fully diffuse; not sampled)
     VibACC: 1.0
     RotACC: 1.0
   ADBSat_Sentman:

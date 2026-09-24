@@ -30,7 +30,7 @@ All split tetrahedra fall in PyHOPE scaled-Jacobian bin 0.0-0.1, matching the be
 
 ## Open prerequisites
 
-1. Confirm solver-specific equivalence or mapping of accommodation/GSI parameters.
+1. Audit the fixed-diffuse PICLas/Sentman GSI mapping in retained solver inputs.
 2. Source the collisionless diffuse sphere Cd reference and define acceptance tolerance.
 3. Verify solver ingestion and numerical convergence of the uniformly scaled 10 cm Cube; its frozen normalization is Lref=0.1 m and Aref=0.01 square metres.
 4. Perform PICLas ingestion smoke tests and independent convergence studies.
@@ -66,4 +66,4 @@ The CHAMP command is expected to fail until the listed prerequisites are resolve
 
 ## Recommended next order
 
-1. Confirm the documented GSI mapping with deterministic input audits. 2. Run deterministic sphere and shell ingestion/physics verification. 3. Run numerical convergence variants. 4. Freeze Paper 1 settings and execute paired pilots. 5. Decide production allocations. In parallel at the planning level only, resolve CHAMP scale/population and repair GOCE archive metadata before any Paper 2 field campaign.
+1. Audit the documented fixed-diffuse GSI mapping in retained deterministic solver inputs. 2. Run deterministic sphere and shell ingestion/physics verification. 3. Run numerical convergence variants. 4. Freeze Paper 1 settings and execute paired pilots. 5. Decide production allocations. In parallel at the planning level only, resolve CHAMP scale/population and repair GOCE archive metadata before any Paper 2 field campaign.

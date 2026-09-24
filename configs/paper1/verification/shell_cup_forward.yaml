@@ -77,22 +77,26 @@ models:
     id: PICLas_DSMC
     kind: legacy_piclas
     kwargs:
-      simulator_module: PICLas_prandtl
+      simulator_module: PICLas
       mpi_procs: 64
       piclas_mode: dsmc
+      payload_defaults:
+        momentum_accommodation: 1.0
       collision_mode: 0
       calc_quality_factors: false
   lf:
   - id: PICLas_TPMC
     kind: legacy_piclas_tpmc
     kwargs:
-      simulator_module: PICLas_prandtl
+      simulator_module: PICLas
       mpi_procs: 64
+      payload_defaults:
+        momentum_accommodation: 1.0
   - id: Sentman
     kind: legacy_adbsat
     method: Sentman
     kwargs:
-      simulator_module: ADBSat_prandtl
+      simulator_module: ADBSat
       base_dir: ADBSat-PyVersion
   available_qois:
     PICLas_DSMC:
