@@ -78,19 +78,20 @@ models:
     kind: legacy_piclas
     kwargs:
       simulator_module: PICLas
-      mpi_procs: 64
+      mpi_procs: 128
       piclas_mode: dsmc
       payload_defaults:
+        macro_particle_factor_scale: 10.0
         momentum_accommodation: 1.0
         piclas_inflow_boundary_index: 2
-      collision_mode: 0
+      collision_mode: 2
       calc_quality_factors: false
   lf:
   - id: PICLas_TPMC
     kind: legacy_piclas_tpmc
     kwargs:
       simulator_module: PICLas
-      mpi_procs: 64
+      mpi_procs: 128
       payload_defaults:
         momentum_accommodation: 1.0
         piclas_inflow_boundary_index: 2
