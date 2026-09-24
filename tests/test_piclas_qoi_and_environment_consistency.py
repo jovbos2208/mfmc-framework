@@ -32,7 +32,7 @@ if str(ADBSAT_PY_DIR) not in sys.path:
 if str(UPDATE_PARAMETER_DIR) not in sys.path:
     sys.path.insert(0, str(UPDATE_PARAMETER_DIR))
 
-from PICLas import PiclasSimulator, _boundary3_source_name, _resolve_update_command
+from PICLas import PiclasSimulator, _boundary3_source_name, _resolve_update_command, _rewrite_job_ini_geometry
 from PICLas_prandtl import (
     PiclasSimulator as PrandtlPiclasSimulator,
     _resolve_update_command as _resolve_prandtl_update_command,
@@ -246,6 +246,69 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
 
     def test_update_parameter_sets_mesh_and_project_for_champ_payload(self):
         self._assert_update_parameter_geometry("CHAMP", "CHAMP_mesh.h5", "OBJ")
+
+
+    def test_update_parameter_supports_boundary2_scattering_maxwell(self):
+        payload = {
+            "geometry_id": "SpecPractOpt_cylinder_hex",
+            "geometry_name": "SpecPractOpt cylinder hex",
+            "hf_mesh": "SpecPractOpt_cylinder_hex_mesh.h5",
+            "rho": [1.0e11, 2.0e11, 3.0e11, 4.0e11, 5.0e10, 6.0e9, 7.0e9, 8.0e9, 9.0e9, 1.0e-9],
+            "Tinf": 900.0,
+            "piclas_object_boundary_name": "OBJ",
+            "piclas_object_boundary_index": 2,
+            "piclas_surface_model": 0,
+            "piclas_surface_model_scattering": 0,
+            "trans_accommodation": 1.0,
+            "momentum_accommodation": 0.42,
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            ini_path = os.path.join(td, "parameter.ini")
+            payload_path = os.path.join(td, "payload.json")
+            shutil.copyfile(UPDATE_PARAMETER_DIR / "parameter.ini", ini_path)
+            with open(payload_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+
+            piclas_update.update_ini_from_csv(200, 0.0, 0, ini_path, env_payload_path=payload_path)
+            ini_text = pathlib.Path(ini_path).read_text(encoding="utf-8")
+
+        self.assertIn("Part-Boundary1-SourceName  = IN", ini_text)
+        self.assertIn("Part-Boundary2-SourceName  = OBJ", ini_text)
+        self.assertIn("Part-Boundary2-Condition   = reflective", ini_text)
+        self.assertIn("Part-Boundary2-SurfaceModel = 0", ini_text)
+        self.assertIn("Part-Boundary2-SurfaceModelScattering = 0", ini_text)
+        self.assertIn("Part-Boundary2-MomentumACC = 0.42", ini_text)
+        self.assertNotIn("Part-Boundary2-TransACC", ini_text)
+        self.assertIn("Part-Boundary3-SourceName  = OUT", ini_text)
+        self.assertIn("Part-Boundary3-Condition   = open", ini_text)
+        self.assertNotIn("Part-Boundary3-MomentumACC", ini_text)
+
+    def test_geometry_rewrite_preserves_boundary2_as_object(self):
+        with tempfile.TemporaryDirectory() as td:
+            ini_path = pathlib.Path(td, "parameter.ini")
+            ini_path.write_text(
+                "MeshFile = old.h5\n"
+                "ProjectName = old\n"
+                "Part-Boundary1-SourceName = IN\n"
+                "Part-Boundary2-SourceName = OUT\n"
+                "Part-Boundary3-SourceName = OBJ\n",
+                encoding="utf-8",
+            )
+
+            _rewrite_job_ini_geometry(
+                str(ini_path),
+                mesh_file="new.h5",
+                project_name="new",
+                source_name="OBJ",
+                mesh_boundary_names=["IN", "OBJ", "OUT"],
+                object_boundary_index=2,
+            )
+            ini_text = ini_path.read_text(encoding="utf-8")
+
+        self.assertIn("Part-Boundary1-SourceName  = IN", ini_text)
+        self.assertIn("Part-Boundary2-SourceName  = OBJ", ini_text)
+        self.assertIn("Part-Boundary3-SourceName  = OUT", ini_text)
 
     def test_update_parameter_applies_numerical_controls_from_payload(self):
         payload = {

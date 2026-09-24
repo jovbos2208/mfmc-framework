@@ -544,6 +544,25 @@ def _resolve_boundary3_source_name(payload: Dict[str, Any]) -> str:
     return "OBJ"
 
 
+def _resolve_object_boundary_index(payload: Dict[str, Any]) -> int:
+    raw = _payload_value(payload, ["piclas_object_boundary_index"], 3)
+    try:
+        index = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"piclas_object_boundary_index must be an integer, got {raw!r}") from exc
+    if index not in {1, 2, 3}:
+        raise ValueError(f"piclas_object_boundary_index must be 1, 2, or 3, got {index}")
+    return index
+
+
+def _particle_boundary_sources(object_boundary_index: int, object_source_name: str) -> Dict[int, str]:
+    open_sources = iter(("IN", "OUT"))
+    return {
+        index: object_source_name if index == object_boundary_index else next(open_sources)
+        for index in (1, 2, 3)
+    }
+
+
 def _geometry_candidates(payload: Dict[str, Any]) -> list[Any]:
     sample = payload.get("sample", {})
     sample = sample if isinstance(sample, dict) else {}
@@ -890,6 +909,14 @@ def update_ini_from_csv(
     mesh_file = _resolve_mesh_file(payload)
     project_name = _resolve_project_name(payload)
     boundary3_source_name = _resolve_boundary3_source_name(payload)
+    object_boundary_index = _resolve_object_boundary_index(payload)
+    boundary_sources = _particle_boundary_sources(object_boundary_index, boundary3_source_name)
+    surface_model = _payload_value(payload, ["piclas_surface_model"], None)
+    surface_model_scattering = _payload_value(
+        payload,
+        ["piclas_surface_model_scattering"],
+        None,
+    )
     debug_payload = {
         "geometry_id": payload.get("geometry_id"),
         "geometry_name": payload.get("geometry_name"),
@@ -897,6 +924,10 @@ def update_ini_from_csv(
         "resolved_mesh_file": mesh_file,
         "resolved_project_name": project_name,
         "resolved_boundary3_source_name": boundary3_source_name,
+        "resolved_object_boundary_index": object_boundary_index,
+        "resolved_boundary_sources": boundary_sources,
+        "piclas_surface_model": surface_model,
+        "piclas_surface_model_scattering": surface_model_scattering,
         "env_model": env_model,
         "env_payload_path": env_payload_path,
         "ini_path": ini_path,
@@ -988,7 +1019,53 @@ def update_ini_from_csv(
         if seed_2 == seed_1:
             seed_2 = ((seed_1 + 1) % (2**31 - 1)) or 2
 
+    boundary_pattern = re.compile(r"\s*Part-Boundary(\d+)-([A-Za-z0-9]+)")
+    surface_keys = {
+        "WallTemp", "TransACC", "MomentumACC", "VibACC", "RotACC",
+        "SurfaceModel", "SurfaceModelScattering",
+    }
+    only_scattering = (
+        surface_model is not None
+        and surface_model_scattering is not None
+        and int(surface_model) == 0
+        and int(surface_model_scattering) == 0
+    )
+    if only_scattering:
+        object_values = {"MomentumACC": f"{momentum_acc:.6g}"}
+    else:
+        object_values = {
+            "WallTemp": f"{wall_temp:.6g}",
+            "TransACC": f"{trans_acc:.6g}",
+            "MomentumACC": f"{momentum_acc:.6g}",
+            "VibACC": f"{vib_acc:.6g}",
+            "RotACC": f"{rot_acc:.6g}",
+        }
+    if surface_model is not None:
+        object_values["SurfaceModel"] = str(int(surface_model))
+    if surface_model_scattering is not None:
+        object_values["SurfaceModelScattering"] = str(int(surface_model_scattering))
+    seen_object_keys = set()
+
     for line in ini_lines:
+        boundary_match = boundary_pattern.match(line)
+        if boundary_match:
+            boundary_index = int(boundary_match.group(1))
+            boundary_key = boundary_match.group(2)
+            if boundary_key == "SourceName" and boundary_index in boundary_sources:
+                line = f"Part-Boundary{boundary_index}-SourceName  = {boundary_sources[boundary_index]}\n"
+            elif boundary_key == "Condition" and boundary_index in boundary_sources:
+                condition = "reflective" if boundary_index == object_boundary_index else "open"
+                line = f"Part-Boundary{boundary_index}-Condition   = {condition}\n"
+            elif boundary_key in surface_keys:
+                if boundary_index != object_boundary_index:
+                    continue
+                if boundary_key in object_values:
+                    seen_object_keys.add(boundary_key)
+                    line = (
+                        f"Part-Boundary{object_boundary_index}-{boundary_key} = "
+                        f"{object_values[boundary_key]}\n"
+                    )
+
         match = species_pattern.match(line)
         if match:
             species_index = int(match.group(1))
@@ -1020,18 +1097,6 @@ def update_ini_from_csv(
             line = f"ProjectName     = {project_name}    ! Name of the current simulation\n"
         elif "Init1-MWTemperatureIC" in line:
             line = f"Part-Species$-Init1-MWTemperatureIC = {Tinf:.0f}  ! Temperature [K] for Maxwell distribution\n"
-        elif "Part-Boundary3-SourceName" in line:
-            line = f"Part-Boundary3-SourceName  = {boundary3_source_name}\n"
-        elif "Part-Boundary3-WallTemp" in line:
-            line = f"Part-Boundary3-WallTemp    = {wall_temp:.6g}         ! Wall temperature [K] of reflective particle boundary [$].\n"
-        elif "Part-Boundary3-TransACC" in line:
-            line = f"Part-Boundary3-TransACC    = {trans_acc:.6g}           ! Translation accommodation coefficient of reflective particle boundary [$].\n"
-        elif "Part-Boundary3-MomentumACC" in line:
-            line = f"Part-Boundary3-MomentumACC = {momentum_acc:.6g}           ! Momentum accommodation coefficient of reflective particle boundary [$].\n"
-        elif "Part-Boundary3-VibACC" in line:
-            line = f"Part-Boundary3-VibACC      = {vib_acc:.6g}           ! Vibrational accommodation coefficient of reflective particle boundary [$].\n"
-        elif "Part-Boundary3-RotACC" in line:
-            line = f"Part-Boundary3-RotACC      = {rot_acc:.6g}           ! Rotational accommodation coefficient of reflective particle boundary [$].\n"
         elif "MacroParticleFactor" in line:
             line = (
                 f"Part-Species$-MacroParticleFactor = {mpf:.5E} "
@@ -1086,6 +1151,26 @@ def update_ini_from_csv(
             )
 
         updated_lines.append(line)
+
+    missing_object_lines = [
+        f"Part-Boundary{object_boundary_index}-{key} = {value}\n"
+        for key, value in object_values.items()
+        if key not in seen_object_keys
+    ]
+    if missing_object_lines:
+        insert_after = next(
+            (
+                pos
+                for pos, line in enumerate(updated_lines)
+                if line.lstrip().startswith(f"Part-Boundary{object_boundary_index}-Condition")
+            ),
+            None,
+        )
+        if insert_after is None:
+            raise ValueError(
+                f"parameter file has no Part-Boundary{object_boundary_index}-Condition entry"
+            )
+        updated_lines[insert_after + 1:insert_after + 1] = missing_object_lines
 
     with open(ini_path, "w", encoding="utf-8") as file:
         file.writelines(updated_lines)

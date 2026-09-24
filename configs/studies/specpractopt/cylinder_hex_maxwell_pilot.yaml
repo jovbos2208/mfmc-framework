@@ -1,0 +1,164 @@
+study:
+  id: specpractopt_cylinder_hex_maxwell_aos45_pilot
+  mode: mixed_uncertainty
+  active_source_blocks:
+  - gsi.momentum_accommodation
+  mixed_source_blocks:
+  - - gsi.momentum_accommodation
+sources:
+  blocks:
+  - name: gsi.momentum_accommodation
+geometries:
+- id: SpecPractOpt_cylinder_hex
+  name: SpecPractOpt cylinder hex
+  characteristic_length: 0.35902899
+  geometry_class: cylinder
+  metadata:
+    hf_mesh: SpecPractOpt_cylinder_hex_mesh.h5
+    lf_model: SpecPractOpt_cylinder_hex
+    reference_area_m2: 0.2054622883746301
+    reference_area_source: piclas_h5_OBJ_half_total_surface
+    piclas_object_boundary_name: OBJ
+regimes:
+- id: AO_1E15_FIXED_AOS_P045_AOA_P000
+  label: Fixed pure atomic oxygen at 1e15 particles per cubic metre; AoS=45 deg; AoA=0 deg
+  descriptors:
+    altitude_km: 313.0
+    characteristic_length: 0.35902899
+    knudsen_number: 3784.57
+    speed_ratio: 7.72286
+    freestream_temperature: 961.0
+    composition_descriptor: O=1.0,N2=0.0,O2=0.0,He=0.0
+    solar_activity_state: fixed
+    geomagnetic_activity_state: fixed
+    wind_state: zero
+    geometry_class: cylinder
+    surface_state: maxwell_only_scattering
+    density_kg_m3: 2.65669645265334e-11
+    number_density_m3: 1000000000000000.0
+    relative_speed_mps: 7718.371
+    aos_deg: 45.0
+    aoa_deg: 0.0
+variables:
+- name: momentum_accommodation
+  source_block: gsi.momentum_accommodation
+  distribution:
+    kind: uniform
+    params:
+      low: 0.0
+      high: 1.0
+  baseline: 0.5
+  bounds:
+  - 0.0
+  - 1.0
+sampling:
+  method: independent
+  sample_count: 50
+  max_production_samples: 50
+models:
+  hf:
+    id: PICLas_TPMC
+    kind: legacy_piclas
+    kwargs:
+      simulator_module: PICLas
+      mpi_procs: 128
+      piclas_mode: tpmc
+      collision_mode: 0
+      calc_quality_factors: false
+      qoi_aliases:
+        C_L: C_Y
+        C_L2: C_Y2
+      payload_defaults:
+        t_end_s: 0.0001
+        manual_timestep_s: 1.0e-07
+        sampling_iterations: 250
+        piclas_object_boundary_index: 2
+        piclas_surface_model: 0
+        piclas_surface_model_scattering: 0
+  lf:
+  - id: Maxwell
+    kind: legacy_adbsat
+    method: PICLasMaxwell
+    kwargs:
+      simulator_module: ADBSat
+      base_dir: ADBSat-PyVersion
+      qoi_aliases:
+        C_L: C_Y
+        C_L2: C_Y2
+  available_qois:
+    PICLas_TPMC:
+    - C_D
+    - C_D2
+    - C_L
+    - C_L2
+    Maxwell:
+    - C_D
+    - C_D2
+    - C_L
+    - C_L2
+qois:
+  direct:
+  - C_D
+  - C_D2
+  - C_L
+  - C_L2
+  derived:
+  - name: Var_C_D
+    expression: E[C_D2]-E[C_D]^2
+  - name: Var_C_L
+    expression: E[C_L2]-E[C_L]^2
+  batch_cd_cd2: false
+  single_allocation_all_qois: true
+pilot:
+  size: 50
+  sizes:
+  - 50
+  robustness_repetitions: 50
+  reuse_across_budgets: true
+budget:
+  total:
+  - 1.0
+  min_hf: 1
+  hf_fraction: 0.0
+repetitions: 1
+seeds:
+  global: 20260922
+outputs:
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_maxwell_aos45/pilot
+  write_parquet: false
+  write_model_evaluations: true
+  write_config_snapshot: true
+  plots: false
+execution:
+  backend: legacy_slurm
+  resume: false
+  aos_deg: 45.0
+  aoa_deg: 0.0
+  flow_zero_direction:
+  - 1.0
+  - 0.0
+  - 0.0
+  adbsat_aos_offset_deg: 0.0
+  environment:
+    model: csv
+    atmosphere_row:
+    - 2.65669645265334e-11
+    - 0.0
+    - 0.0
+    - 1000000000000000.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 961.0
+    relative_speed_mps: 7718.371
+    wind_enu_mps:
+    - 0.0
+    - 0.0
+    - 0.0
+    use_winds: false
+    apply_wind_to_speed: false
+    trans_accommodation: 1.0
+    wall_temperature_k: 300.0

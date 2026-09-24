@@ -107,6 +107,7 @@ def _rewrite_job_ini_geometry(
     project_name: str,
     source_name: str,
     mesh_boundary_names=None,
+    object_boundary_index: int = 3,
 ) -> None:
     with open(ini_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -116,7 +117,13 @@ def _rewrite_job_ini_geometry(
         for name in (mesh_boundary_names or [])
         if str(name).strip()
     }
-    requested_boundaries = {1: "IN", 2: "OUT", 3: source_name}
+    if int(object_boundary_index) not in {1, 2, 3}:
+        raise ValueError("object_boundary_index must be 1, 2, or 3")
+    open_sources = iter(("IN", "OUT"))
+    requested_boundaries = {
+        index: source_name if index == int(object_boundary_index) else next(open_sources)
+        for index in (1, 2, 3)
+    }
     if boundary_lookup:
         missing = [
             name for name in requested_boundaries.values()
@@ -591,12 +598,18 @@ class PiclasSimulator:
             geometry_mesh=geometry_mesh,
             object_boundary_name=object_boundary_name,
         )
+        object_boundary_index = 3
+        if env_payload_path:
+            with open(env_payload_path, "r", encoding="utf-8") as payload_file:
+                environment_payload = json.load(payload_file)
+            object_boundary_index = int(environment_payload.get("piclas_object_boundary_index", 3))
         _rewrite_job_ini_geometry(
             job_ini_path,
             mesh_file=mesh_filename,
             project_name=project_name,
             source_name=source_name,
             mesh_boundary_names=mesh_boundary_names,
+            object_boundary_index=object_boundary_index,
         )
         _patch_piclas_collision_mode(
             job_ini_path,
@@ -619,6 +632,7 @@ class PiclasSimulator:
                 "resolved_mesh_filename": mesh_filename,
                 "resolved_project_name": project_name,
                 "resolved_boundary3_source_name": source_name,
+                "resolved_object_boundary_index": object_boundary_index,
                 "job_ini_path": job_ini_path,
                 "debug_update_json": debug_paths["update_json"],
             }
