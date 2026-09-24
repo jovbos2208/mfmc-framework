@@ -2,7 +2,7 @@
 # TPMC/ADBSat-Sentman values, correlations, beta coefficients and measured costs.
 
 study:
-  id: specpractopt_cylinder_hex_gsi_sentman_aos45_pilot
+  id: specpractopt_cylinder_hex_gsi_sentman_diffuse_aos45_pilot
   mode: mixed_uncertainty
   active_source_blocks:
     - gsi.energy_accommodation
@@ -77,6 +77,8 @@ models:
       calc_quality_factors: false
       qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
       payload_defaults:
+        # Sentman-consistent diffuse reflection; sampled energy_accommodation still sets TransACC.
+        momentum_accommodation: 1.0
         t_end_s: 1.0e-4
         manual_timestep_s: 1.0e-7
         sampling_iterations: 250
@@ -116,7 +118,7 @@ repetitions: 1
 seeds: {global: 20260922}
 
 outputs:
-  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_aos45/pilot
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aos45/pilot
   write_parquet: false
   write_model_evaluations: true
   write_config_snapshot: true

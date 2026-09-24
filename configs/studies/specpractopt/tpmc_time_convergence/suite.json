@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "study_id": "specpractopt_cylinder_hex_tpmc_time_convergence",
+  "purpose": "Numerical convergence of fixed-condition TPMC coefficients with simulation end time",
+  "common_random_numbers": true,
+  "levels": [
+    {
+      "id": "tend_2p5e-05",
+      "t_end_s": 2.5e-05,
+      "manual_timestep_s": 1e-07,
+      "time_steps": 250,
+      "sampling_iterations": 62,
+      "sampling_fraction": 0.25,
+      "workflow_config": "configs/studies/specpractopt/tpmc_time_convergence/tend_2p5e-05.json",
+      "seeds": [
+        20260930,
+        20260931,
+        20260932,
+        20260933,
+        20260934
+      ]
+    },
+    {
+      "id": "tend_5p0e-05",
+      "t_end_s": 5e-05,
+      "manual_timestep_s": 1e-07,
+      "time_steps": 500,
+      "sampling_iterations": 125,
+      "sampling_fraction": 0.25,
+      "workflow_config": "configs/studies/specpractopt/tpmc_time_convergence/tend_5p0e-05.json",
+      "seeds": [
+        20260930,
+        20260931,
+        20260932,
+        20260933,
+        20260934
+      ]
+    },
+    {
+      "id": "tend_1p0e-04",
+      "t_end_s": 0.0001,
+      "manual_timestep_s": 1e-07,
+      "time_steps": 1000,
+      "sampling_iterations": 250,
+      "sampling_fraction": 0.25,
+      "workflow_config": "configs/studies/specpractopt/tpmc_time_convergence/tend_1p0e-04.json",
+      "seeds": [
+        20260930,
+        20260931,
+        20260932,
+        20260933,
+        20260934
+      ]
+    },
+    {
+      "id": "tend_2p0e-04",
+      "t_end_s": 0.0002,
+      "manual_timestep_s": 1e-07,
+      "time_steps": 2000,
+      "sampling_iterations": 500,
+      "sampling_fraction": 0.25,
+      "workflow_config": "configs/studies/specpractopt/tpmc_time_convergence/tend_2p0e-04.json",
+      "seeds": [
+        20260930,
+        20260931,
+        20260932,
+        20260933,
+        20260934
+      ]
+    },
+    {
+      "id": "tend_4p0e-04",
+      "t_end_s": 0.0004,
+      "manual_timestep_s": 1e-07,
+      "time_steps": 4000,
+      "sampling_iterations": 1000,
+      "sampling_fraction": 0.25,
+      "workflow_config": "configs/studies/specpractopt/tpmc_time_convergence/tend_4p0e-04.json",
+      "seeds": [
+        20260930,
+        20260931,
+        20260932,
+        20260933,
+        20260934
+      ]
+    }
+  ]
+}

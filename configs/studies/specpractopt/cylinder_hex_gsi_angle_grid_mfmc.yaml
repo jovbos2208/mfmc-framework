@@ -3,7 +3,7 @@
 # and receive a budget equal to 20 mean TPMC-run costs.
 
 study:
-  id: specpractopt_cylinder_hex_gsi_tpmc_sentman_mfmc
+  id: specpractopt_cylinder_hex_gsi_tpmc_sentman_diffuse_mfmc
   mode: mixed_uncertainty
   active_source_blocks:
     - gsi.energy_accommodation
@@ -91,6 +91,8 @@ models:
       calc_quality_factors: false
       qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
       payload_defaults:
+        # Sentman-consistent diffuse reflection; sampled energy_accommodation still sets TransACC.
+        momentum_accommodation: 1.0
         t_end_s: 1.0e-4
         manual_timestep_s: 1.0e-7
         sampling_iterations: 250
@@ -120,8 +122,8 @@ pilot:
   robustness_repetitions: 50
   # Relative to this config file. The pilot output itself is written relative
   # to the Framework repository root when the commands below are run there.
-  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_aos45/pilot
-  source_study_id: specpractopt_cylinder_hex_gsi_sentman_aos45_pilot
+  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aos45/pilot
+  source_study_id: specpractopt_cylinder_hex_gsi_sentman_diffuse_aos45_pilot
   source_mode: mixed_uncertainty
   match_regime_id: false
   reuse_external_model_evaluation_stats: true
@@ -129,7 +131,7 @@ pilot:
 
 budget:
   from_model_evaluations:
-    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_aos45/pilot/model_evaluations.csv
+    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aos45/pilot/model_evaluations.csv
     phase: pilot_hf
     model_id: PICLas_TPMC
     qoi: C_D
@@ -147,7 +149,7 @@ repetitions: 1
 seeds: {global: 20260922}
 
 outputs:
-  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_aos45/angle_grid_mfmc
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aos45/angle_grid_mfmc
   write_parquet: false
   write_model_evaluations: true
   write_config_snapshot: true

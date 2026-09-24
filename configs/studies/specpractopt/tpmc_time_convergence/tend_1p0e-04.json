@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "similarity": {
+    "linear_scale": 1.0,
+    "density_scale": 1.0,
+    "basis": "Unscaled SpecPractOpt geometry and fixed physical environment"
+  },
+  "convergence_level": {
+    "id": "tend_1p0e-04",
+    "t_end_s": 0.0001,
+    "manual_timestep_s": 1e-07,
+    "time_steps": 1000,
+    "sampling_iterations": 250,
+    "sampling_fraction": 0.25
+  },
+  "adapter": {
+    "model_id": "PICLas_TPMC",
+    "fidelity": "hf",
+    "available_qois": [
+      "C_D",
+      "C_L"
+    ],
+    "kwargs": {
+      "simulator_module": "PICLas_prandtl",
+      "piclas_dir": "piclas",
+      "update_dir": "update_parameter_file",
+      "update_script": "python update_parameter.py",
+      "piclas_mode": "tpmc",
+      "collision_mode": 0,
+      "calc_quality_factors": false,
+      "mpi_procs": 64,
+      "submission_group_size": 5,
+      "payload_defaults": {
+        "momentum_accommodation": 1.0,
+        "t_end_s": 0.0001,
+        "manual_timestep_s": 1e-07,
+        "sampling_iterations": 250
+      }
+    }
+  },
+  "request": {
+    "study_id": "specpractopt_cylinder_hex_tpmc_time_convergence",
+    "cell_id": "tend_1p0e-04",
+    "qois": [
+      "C_D",
+      "C_L"
+    ],
+    "seed": 20260930,
+    "geometry": {
+      "id": "SpecPractOpt_cylinder_hex",
+      "name": "SpecPractOpt cylinder hex",
+      "characteristic_length": 0.35902899,
+      "geometry_class": "cylinder",
+      "metadata": {
+        "hf_mesh": "SpecPractOpt_cylinder_hex_mesh.h5",
+        "piclas_object_boundary_name": "OBJ",
+        "reference_area_m2": 0.2054622883746301
+      }
+    },
+    "regime": {
+      "id": "AO_1E15_FIXED_AOS_P045_AOA_P000",
+      "label": "Fixed pure atomic oxygen at 1e15 m^-3; AoS=45 deg; AoA=0 deg",
+      "descriptors": {
+        "altitude_km": 313.0,
+        "number_density_m3": 1000000000000000.0,
+        "freestream_temperature": 961.0,
+        "relative_speed_mps": 7718.371,
+        "surface_state": "nominal"
+      }
+    },
+    "active_source_blocks": [],
+    "sample_ids": [
+      "seed-20260930",
+      "seed-20260931",
+      "seed-20260932",
+      "seed-20260933",
+      "seed-20260934"
+    ],
+    "samples": [
+      {
+        "database_index": 0,
+        "aos_deg": 45.0,
+        "aoa_deg": 0.0,
+        "energy_accommodation": 0.5,
+        "wall_temperature_k": 300.0,
+        "random_seed": 20260930
+      },
+      {
+        "database_index": 0,
+        "aos_deg": 45.0,
+        "aoa_deg": 0.0,
+        "energy_accommodation": 0.5,
+        "wall_temperature_k": 300.0,
+        "random_seed": 20260931
+      },
+      {
+        "database_index": 0,
+        "aos_deg": 45.0,
+        "aoa_deg": 0.0,
+        "energy_accommodation": 0.5,
+        "wall_temperature_k": 300.0,
+        "random_seed": 20260932
+      },
+      {
+        "database_index": 0,
+        "aos_deg": 45.0,
+        "aoa_deg": 0.0,
+        "energy_accommodation": 0.5,
+        "wall_temperature_k": 300.0,
+        "random_seed": 20260933
+      },
+      {
+        "database_index": 0,
+        "aos_deg": 45.0,
+        "aoa_deg": 0.0,
+        "energy_accommodation": 0.5,
+        "wall_temperature_k": 300.0,
+        "random_seed": 20260934
+      }
+    ],
+    "metadata": {
+      "environment_model": "csv",
+      "atmosphere_row": [
+        2.65669645265334e-11,
+        0.0,
+        0.0,
+        1000000000000000.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        961.0
+      ],
+      "relative_speed_mps": 7718.371,
+      "flow_zero_direction": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "wind_enu_mps": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "use_winds": false,
+      "apply_wind_to_speed": false,
+      "aos_deg": 45.0,
+      "aoa_deg": 0.0,
+      "surface_state": "nominal",
+      "case_name": "specpractopt_cylinder_hex_tpmc_tend_1p0e-04"
+    }
+  }
+}
