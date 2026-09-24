@@ -53,8 +53,8 @@ variables:
   - 1.0
 sampling:
   method: independent
-  sample_count: 5000
-  max_production_samples: 5000
+  sample_count: 10000000
+  max_production_samples: 100000000
 models:
   hf:
     id: PICLas_TPMC
@@ -64,6 +64,7 @@ models:
       mpi_procs: 128
       piclas_mode: tpmc
       collision_mode: 0
+      submission_group_size: 2
       calc_quality_factors: false
       qoi_aliases:
         C_L: C_Y
@@ -129,22 +130,18 @@ budget:
     regime_id: AO_1E15_FIXED_AOS_P045_AOA_P000
     cost_column: cost
     multiples:
-    - 2.0
-    - 5.0
     - 10.0
     - 20.0
     - 50.0
     - 100.0
   total:
-  - 2.0
-  - 5.0
   - 10.0
   - 20.0
   - 50.0
   - 100.0
   min_hf: 1
   hf_fraction: 0.0
-repetitions: 1
+repetitions: 20
 seeds:
   global: 20260922
 outputs:

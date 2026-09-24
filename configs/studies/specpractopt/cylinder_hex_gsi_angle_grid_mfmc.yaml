@@ -65,7 +65,7 @@ regimes:
 variables:
   - name: energy_accommodation
     source_block: gsi.energy_accommodation
-    distribution: {kind: normal, params: {mean: 0.5, std: 0.1}}
+    distribution: {kind: uniform, params: {low: 0.0, high: 1.0}}
     baseline: 0.5
     bounds: [0.0, 1.0]
   - name: wall_temperature_k
@@ -76,18 +76,19 @@ variables:
 
 sampling:
   method: independent
-  sample_count: 5000
-  max_production_samples: 5000
+  sample_count: 1000000
+  max_production_samples: 10000000
 
 models:
   hf:
     id: PICLas_TPMC
     kind: legacy_piclas
     kwargs:
-      simulator_module: PICLas_prandtl
+      simulator_module: PICLas
       mpi_procs: 64
       piclas_mode: tpmc
       collision_mode: 0
+      submission_group_size: 2
       calc_quality_factors: false
       qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
       payload_defaults:
@@ -101,7 +102,7 @@ models:
       kind: legacy_adbsat
       method: Sentman
       kwargs:
-        simulator_module: ADBSat_prandtl
+        simulator_module: ADBSat
         base_dir: ADBSat-PyVersion
         qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
   available_qois:

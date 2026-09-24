@@ -51,7 +51,7 @@ regimes:
 variables:
   - name: energy_accommodation
     source_block: gsi.energy_accommodation
-    distribution: {kind: normal, params: {mean: 0.5, std: 0.1}}
+    distribution: {kind: uniform, params: {low: 0.0, high: 1.0}}
     baseline: 0.5
     bounds: [0.0, 1.0]
   - name: wall_temperature_k
@@ -62,19 +62,20 @@ variables:
 
 sampling:
   method: independent
-  sample_count: 5000
-  max_production_samples: 5000
+  sample_count: 100000000
+  max_production_samples: 100000000
 
 models:
   hf:
     id: PICLas_TPMC
     kind: legacy_piclas
     kwargs:
-      simulator_module: PICLas_prandtl
-      mpi_procs: 64
+      simulator_module: PICLas
+      mpi_procs: 128
       piclas_mode: tpmc
       collision_mode: 0
       calc_quality_factors: false
+      submission_group_size: 2
       qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
       payload_defaults:
         # Sentman-consistent diffuse reflection; sampled energy_accommodation still sets TransACC.
@@ -87,7 +88,7 @@ models:
       kind: legacy_adbsat
       method: Sentman
       kwargs:
-        simulator_module: ADBSat_prandtl
+        simulator_module: ADBSat
         base_dir: ADBSat-PyVersion
         qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
   available_qois:
@@ -123,14 +124,14 @@ budget:
     geometry_id: SpecPractOpt_cylinder_hex
     regime_id: AO_1E15_FIXED_AOS_P045_AOA_P000
     cost_column: cost
-    multiples: [2.0, 5.0, 10.0, 20.0, 50.0, 100.0]
+    multiples: [10.0, 20.0, 50.0, 100.0]
   # Validation fallback before the pilot exists. Once model_evaluations.csv is
   # available, these values are replaced by multiples of the mean TPMC cost.
-  total: [2.0, 5.0, 10.0, 20.0, 50.0, 100.0]
+  total: [10.0, 20.0, 50.0, 100.0]
   min_hf: 1
   hf_fraction: 0.0
 
-repetitions: 1
+repetitions: 20
 seeds: {global: 20260922}
 
 outputs:
