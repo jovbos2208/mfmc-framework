@@ -82,6 +82,7 @@ models:
       piclas_mode: dsmc
       payload_defaults:
         momentum_accommodation: 1.0
+        piclas_inflow_boundary_index: 2
       collision_mode: 0
       calc_quality_factors: false
   lf:
@@ -92,6 +93,7 @@ models:
       mpi_procs: 64
       payload_defaults:
         momentum_accommodation: 1.0
+        piclas_inflow_boundary_index: 2
   - id: Sentman
     kind: legacy_adbsat
     method: Sentman

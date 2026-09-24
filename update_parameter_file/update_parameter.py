@@ -555,6 +555,25 @@ def _resolve_object_boundary_index(payload: Dict[str, Any]) -> int:
     return index
 
 
+def _resolve_inflow_boundary_index(
+    payload: Dict[str, Any],
+    object_boundary_index: int,
+    boundary_sources: Dict[int, str],
+) -> int:
+    raw = _payload_value(payload, ["piclas_inflow_boundary_index"], None)
+    if raw is None:
+        return next(index for index, source in boundary_sources.items() if source == "IN")
+    try:
+        index = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"piclas_inflow_boundary_index must be an integer, got {raw!r}") from exc
+    if index not in {1, 2, 3}:
+        raise ValueError(f"piclas_inflow_boundary_index must be 1, 2, or 3, got {index}")
+    if index == object_boundary_index:
+        raise ValueError("piclas_inflow_boundary_index must not select the object boundary")
+    return index
+
+
 def _particle_boundary_sources(object_boundary_index: int, object_source_name: str) -> Dict[int, str]:
     open_sources = iter(("IN", "OUT"))
     return {
@@ -911,6 +930,11 @@ def update_ini_from_csv(
     boundary3_source_name = _resolve_boundary3_source_name(payload)
     object_boundary_index = _resolve_object_boundary_index(payload)
     boundary_sources = _particle_boundary_sources(object_boundary_index, boundary3_source_name)
+    inflow_boundary_index = _resolve_inflow_boundary_index(
+        payload,
+        object_boundary_index,
+        boundary_sources,
+    )
     surface_model = _payload_value(payload, ["piclas_surface_model"], None)
     surface_model_scattering = _payload_value(
         payload,
@@ -925,6 +949,7 @@ def update_ini_from_csv(
         "resolved_project_name": project_name,
         "resolved_boundary3_source_name": boundary3_source_name,
         "resolved_object_boundary_index": object_boundary_index,
+        "resolved_inflow_boundary_index": inflow_boundary_index,
         "resolved_boundary_sources": boundary_sources,
         "piclas_surface_model": surface_model,
         "piclas_surface_model_scattering": surface_model_scattering,
@@ -1080,7 +1105,9 @@ def update_ini_from_csv(
                     "! Number density [1/m³] (real particles)\n"
                 )
 
-        if line.lstrip().startswith("MeshFile"):
+        if line.lstrip().startswith("Part-Species$-Surfaceflux1-BC"):
+            line = f"Part-Species$-Surfaceflux1-BC = {inflow_boundary_index}\n"
+        elif line.lstrip().startswith("MeshFile"):
             line = f"MeshFile = {mesh_file}  ! (relative) path to meshfile\n"
         elif line.lstrip().startswith("TEnd"):
             t_end_value = t_end_override

@@ -310,6 +310,29 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
         self.assertIn("Part-Boundary2-SourceName  = OBJ", ini_text)
         self.assertIn("Part-Boundary3-SourceName  = OUT", ini_text)
 
+    def test_update_parameter_sets_opposite_inflow_boundary_for_backward_shell(self):
+        payload = {
+            "geometry_id": "HemisphereShell_P1",
+            "geometry_name": "HemisphereShell_P1",
+            "hf_mesh": "hemisphere_shell_ro0p05_ri0p048_medium_mesh.h5",
+            "rho": [1.0e11, 2.0e11, 3.0e11, 4.0e11, 5.0e10, 6.0e9, 7.0e9, 8.0e9, 9.0e9, 1.0e-9],
+            "Tinf": 900.0,
+            "piclas_object_boundary_name": "BENCHMARK_BODY",
+            "piclas_inflow_boundary_index": 2,
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            ini_path = os.path.join(td, "parameter.ini")
+            payload_path = os.path.join(td, "payload.json")
+            shutil.copyfile(UPDATE_PARAMETER_DIR / "parameter.ini", ini_path)
+            with open(payload_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+
+            piclas_update.update_ini_from_csv(300, 180.0, 0, ini_path, env_payload_path=payload_path)
+            ini_text = pathlib.Path(ini_path).read_text(encoding="utf-8")
+
+        self.assertIn("Part-Species$-Surfaceflux1-BC = 2", ini_text)
+
     def test_update_parameter_applies_numerical_controls_from_payload(self):
         payload = {
             "geometry_id": "Cube",
@@ -626,6 +649,34 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
         self.assertAlmostEqual(expected_moment_coefficient[1], qois["C_My"][0], places=12)
         self.assertAlmostEqual(expected_moment_coefficient[2], qois["C_Mz"][0], places=12)
         self.assertEqual([4.0], cpu_h)
+
+    def test_piclas_collect_results_qois_uses_configured_reference_area(self):
+        force_per_area = np.asarray([[0.0, -1.0, 0.5], [0.0, -2.0, 1.5]], dtype=float)
+        centers = np.asarray([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], dtype=float)
+
+        with tempfile.TemporaryDirectory() as td:
+            for name in ["output1.vtu", "output2.vtu"]:
+                open(os.path.join(td, name), "w", encoding="utf-8").close()
+            pathlib.Path(td, "cpu_time.txt").write_text("3600000\n", encoding="utf-8")
+            pathlib.Path(td, "dyn_p.txt").write_text("2.0\n", encoding="utf-8")
+
+            sim = PiclasSimulator(mpi_procs=4)
+            with patch(
+                "PICLas.cell_areas_and_total",
+                return_value=(np.asarray([2.0, 2.0], dtype=float), 4.0),
+            ), patch(
+                "PICLas.pv.read", return_value=_FakeMesh(force_per_area, centers)
+            ):
+                qois, _ = sim.collect_results_qois(
+                    [td],
+                    AoS=[0.0],
+                    AoA=[0.0],
+                    reference_area_m2=1.0,
+                )
+
+        self.assertAlmostEqual(3.0, qois["C_D"][0], places=12)
+        self.assertAlmostEqual(2.0, qois["C_L"][0], places=12)
+        self.assertAlmostEqual(1.0, qois["C_Mx"][0], places=12)
 
     def test_prandtl_piclas_collect_results_qois_uses_wetted_area_for_moment_length(self):
         force_per_area = np.asarray([[0.0, -1.0, 0.5], [0.0, -2.0, 1.5]], dtype=float)

@@ -1188,6 +1188,10 @@ class LegacyPiclasAdapter(BaseModelAdapter):
                         "piclas_object_boundary_name",
                         request.geometry.metadata.get("piclas_object_boundary_name"),
                     ),
+                    "reference_area_m2": request.metadata.get(
+                        "reference_area_m2",
+                        request.geometry.metadata.get("reference_area_m2"),
+                    ),
                 }
                 submit_kwargs = {
                     key: value for key, value in submit_kwargs.items() if value is not None
@@ -1213,7 +1217,26 @@ class LegacyPiclasAdapter(BaseModelAdapter):
                     **submit_kwargs,
                 )
             else:
-                qoi_values, cpu_hours_list = self.sim.run_batch_qois(
+                run_method = self.sim.run_batch_qois
+                run_extra_kwargs = {}
+                reference_area_m2 = request.metadata.get(
+                    "reference_area_m2",
+                    request.geometry.metadata.get("reference_area_m2"),
+                )
+                try:
+                    signature = inspect.signature(run_method)
+                    accepts_kwargs = any(
+                        parameter.kind == inspect.Parameter.VAR_KEYWORD
+                        for parameter in signature.parameters.values()
+                    )
+                    if reference_area_m2 is not None and (
+                        accepts_kwargs or "reference_area_m2" in signature.parameters
+                    ):
+                        run_extra_kwargs["reference_area_m2"] = reference_area_m2
+                except (TypeError, ValueError):
+                    if reference_area_m2 is not None:
+                        run_extra_kwargs["reference_area_m2"] = reference_area_m2
+                qoi_values, cpu_hours_list = run_method(
                     altitude,
                     aos,
                     indices,
@@ -1225,6 +1248,7 @@ class LegacyPiclasAdapter(BaseModelAdapter):
                     aoa_values=aoa_values,
                     geometry_id=request.geometry.geometry_id,
                     geometry_mesh=request.metadata.get("hf_mesh", request.geometry.metadata.get("hf_mesh")),
+                    **run_extra_kwargs,
                 )
                 batch_handle = {
                     "_completed_result": EvaluationResult(

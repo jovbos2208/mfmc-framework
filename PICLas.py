@@ -269,6 +269,17 @@ def _expand_values(value, count: int, default: float) -> list[float]:
     return [scalar] * count
 
 
+def _resolved_reference_area(configured, fallback: float) -> float:
+    """Use the configured aerodynamic reference area when it is valid."""
+    try:
+        area = float(configured)
+    except (TypeError, ValueError):
+        area = float("nan")
+    if np.isfinite(area) and area > 0.0:
+        return area
+    return max(float(fallback), 1.0e-12)
+
+
 def _expand_int_values(value, count: int, default: int) -> list[int]:
     if isinstance(value, (list, tuple, np.ndarray)):
         arr = np.asarray(value).reshape(-1)
@@ -1137,7 +1148,7 @@ class PiclasSimulator:
             self._wait_for_job_completion(job_id)
         return job_id
 
-    def collect_results(self, job_subdirs):
+    def collect_results(self, job_subdirs, reference_area_m2=None):
         """
         Liefert für jedes Unterverzeichnis
             • globalen aerodynamischen Widerstandskoeffizienten C_D
@@ -1149,8 +1160,9 @@ class PiclasSimulator:
         cpu_hours_list  : list[float]   # Laufzeit in Stunden (pro Job)
         """
         global_pressure_list, cpu_hours_list = [], []
+        reference_areas = _expand_values(reference_area_m2, len(job_subdirs), float("nan"))
 
-        for subdir in job_subdirs:
+        for idx, subdir in enumerate(job_subdirs):
             dyn_p = float(np.loadtxt(os.path.join(subdir, "dyn_p.txt")))
             # ---------------------------------------------------------------------
             # Zellflächen & Referenzfläche einmal aus *einem* VTU einlesen
@@ -1161,7 +1173,7 @@ class PiclasSimulator:
                 raise FileNotFoundError(f"Keine output*.vtu Dateien gefunden in {subdir}")
             area_file = output_files[0]
             areas, A_wetted = cell_areas_and_total(area_file)
-            A_ref = 0.5 * A_wetted
+            A_ref = _resolved_reference_area(reference_areas[idx], 0.5 * A_wetted)
 
 
             # Listen für die einzelnen Zeitschritte
@@ -1198,7 +1210,14 @@ class PiclasSimulator:
 
         return global_pressure_list, cpu_hours_list
 
-    def collect_results_qois(self, job_subdirs, AoS, AoA=0.0, flow_zero_direction=None):
+    def collect_results_qois(
+        self,
+        job_subdirs,
+        AoS,
+        AoA=0.0,
+        flow_zero_direction=None,
+        reference_area_m2=None,
+    ):
         """
         Collect dimensionless drag, lift, side-force, and moment coefficients.
         C_L/C_Y/C_M* may be NaN for scalar-only solver output.
@@ -1210,6 +1229,7 @@ class PiclasSimulator:
         cpu_hours_list = []
         aos_values = _expand_values(AoS, len(job_subdirs), 0.0)
         aoa_values = _expand_values(AoA, len(job_subdirs), 0.0)
+        reference_areas = _expand_values(reference_area_m2, len(job_subdirs), float("nan"))
 
         for idx, subdir in enumerate(job_subdirs):
             dyn_p = float(np.loadtxt(os.path.join(subdir, "dyn_p.txt")))
@@ -1220,9 +1240,9 @@ class PiclasSimulator:
                 raise FileNotFoundError(f"Keine output*.vtu Dateien gefunden in {subdir}")
             area_file = output_files[0]
             areas, A_wetted = cell_areas_and_total(area_file)
-            A_ref = 0.5 * A_wetted
-            # Preserve the established moment length while all loads use
-            # half the total wetted surface as reference area.
+            A_ref = _resolved_reference_area(reference_areas[idx], 0.5 * A_wetted)
+            # Preserve the established moment length based on wetted area;
+            # force and moment coefficients use the configured aerodynamic area.
             L_ref = float(np.sqrt(max(A_wetted, 1e-12)))
 
             drag_pressures, lift_pressures, side_pressures = [], [], []
@@ -1301,6 +1321,7 @@ class PiclasSimulator:
         geometry_mesh=None,
         flow_zero_direction=None,
         object_boundary_name=None,
+        reference_area_m2=None,
     ):
         job_ids = []
         job_subdirs = []
@@ -1353,6 +1374,7 @@ class PiclasSimulator:
             "aos_seq": aos_seq,
             "aoa_seq": aoa_seq,
             "flow_zero_direction": flow_zero_direction if flow_zero_direction is not None else self.flow_zero_direction,
+            "reference_area_m2": reference_area_m2,
             "random_seeds": seed_seq,
             "db_indices": list(db_indices),
         }
@@ -1398,6 +1420,7 @@ class PiclasSimulator:
         aos_seq = list(batch_handle.get("aos_seq", []))
         aoa_seq = list(batch_handle.get("aoa_seq", []))
         flow_zero_direction = batch_handle.get("flow_zero_direction", self.flow_zero_direction)
+        reference_area_m2 = batch_handle.get("reference_area_m2")
 
         if requested_qois is not None:
             qoi_values, cpu_hours_list = self.collect_results_qois(
@@ -1405,12 +1428,16 @@ class PiclasSimulator:
                 AoS=aos_seq,
                 AoA=aoa_seq,
                 flow_zero_direction=flow_zero_direction,
+                reference_area_m2=reference_area_m2,
             )
             requested = list(requested_qois)
             qoi_values = {q: qoi_values.get(q, [float("nan")] * len(job_subdirs)) for q in requested}
             return qoi_values, np.array(cpu_hours_list)
 
-        mean_pressure_list, cpu_hours_list = self.collect_results(job_subdirs)
+        mean_pressure_list, cpu_hours_list = self.collect_results(
+            job_subdirs,
+            reference_area_m2=reference_area_m2,
+        )
         return np.array(mean_pressure_list), np.array(cpu_hours_list)
 
     def complete_batch(self, batch_handle, random_seed, requested_qois=None):
@@ -1431,6 +1458,7 @@ class PiclasSimulator:
         geometry_id=None,
         geometry_mesh=None,
         flow_zero_direction=None,
+        reference_area_m2=None,
     ):
         batch_handle = self.submit_batch_jobs(
             altitude,
@@ -1443,6 +1471,7 @@ class PiclasSimulator:
             geometry_id=geometry_id,
             geometry_mesh=geometry_mesh,
             flow_zero_direction=flow_zero_direction,
+            reference_area_m2=reference_area_m2,
         )
         mean_pressure_list, cpu_hours_list = self.complete_batch(batch_handle, random_seed)
         return mean_pressure_list, cpu_hours_list
@@ -1461,6 +1490,7 @@ class PiclasSimulator:
         geometry_id=None,
         geometry_mesh=None,
         flow_zero_direction=None,
+        reference_area_m2=None,
     ):
         batch_handle = self.submit_batch_jobs(
             altitude,
@@ -1473,6 +1503,7 @@ class PiclasSimulator:
             geometry_id=geometry_id,
             geometry_mesh=geometry_mesh,
             flow_zero_direction=flow_zero_direction,
+            reference_area_m2=reference_area_m2,
         )
         qoi_values, cpu_hours_list = self.complete_batch(
             batch_handle,
