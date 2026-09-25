@@ -151,10 +151,14 @@ ROBUSTNESS_COLUMNS = [
 
 
 class EvaluationCache:
-    def __init__(self, path: str):
+    def __init__(self, path: str, invalidate_model_ids: Optional[Set[str]] = None):
         self.path = path
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._dirty = False
+        self._invalidate_model_ids = {
+            str(model_id) for model_id in (invalidate_model_ids or set())
+        }
+        self._invalidated_keys: Set[str] = set()
         self._load()
 
     def _load(self) -> None:
@@ -168,7 +172,19 @@ class EvaluationCache:
             except json.JSONDecodeError:
                 self._cache = {}
 
-    def get(self, key: str) -> Optional[Dict[str, Any]]:
+    def get(self, key: str, model_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        if (
+            model_id is not None
+            and str(model_id) in self._invalidate_model_ids
+            and key not in self._invalidated_keys
+        ):
+            self._invalidated_keys.add(key)
+            if self._cache.pop(key, None) is not None:
+                self._dirty = True
+                print(
+                    f"[eval] invalidated cache model={model_id} key={key[:12]}",
+                    flush=True,
+                )
         return self._cache.get(key)
 
     def set(self, key: str, value: Dict[str, Any]) -> None:

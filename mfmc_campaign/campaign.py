@@ -107,7 +107,7 @@ def _cache_payload_from_result(result) -> Dict[str, Any]:
 def _evaluate_with_cache(cache: EvaluationCache, adapter, request, qoi: str, phase: str):
     key = _cache_key_for_request(request, qoi, phase)
 
-    cached = cache.get(key)
+    cached = cache.get(key, model_id=request.model_id)
     if cached is not None:
         print(
             f"[eval] cache hit phase={phase} model={request.model_id} "
@@ -137,7 +137,7 @@ def _evaluate_many_with_cache(cache: EvaluationCache, jobs: List[Tuple[str, Any,
 
     for name, adapter, request, qoi, phase in jobs:
         key = _cache_key_for_request(request, qoi, phase)
-        cached = cache.get(key)
+        cached = cache.get(key, model_id=request.model_id)
         if cached is not None:
             print(
                 f"[eval] cache hit phase={phase} model={request.model_id} "
@@ -1359,7 +1359,21 @@ def run_campaign(
     if not should_resume:
         store.reset_outputs(keep_cache=True)
 
-    cache = EvaluationCache(store.cache_json)
+    invalidate_cache_models_raw = cfg.get("execution", {}).get("invalidate_cache_models", [])
+    if isinstance(invalidate_cache_models_raw, str):
+        invalidate_cache_models = {invalidate_cache_models_raw}
+    else:
+        invalidate_cache_models = {str(model_id) for model_id in invalidate_cache_models_raw}
+    cache = EvaluationCache(
+        store.cache_json,
+        invalidate_model_ids=invalidate_cache_models,
+    )
+    if invalidate_cache_models:
+        print(
+            "[eval] selective cache invalidation enabled for models="
+            + ",".join(sorted(invalidate_cache_models)),
+            flush=True,
+        )
     registry = build_adapter_registry(cfg)
     cells = generate_experiment_cells(cfg)
 

@@ -8,6 +8,7 @@ import numpy as np
 from ADBSat import ADBSatSimulator
 from ADBSat_prandtl import ADBSatSimulator as PrandtlADBSatSimulator
 from mfmc_campaign.adapters import BaseModelAdapter, LegacyADBSatAdapter
+from mfmc_campaign.output import EvaluationCache
 
 
 class TestADBSatCoefficientQoIs(unittest.TestCase):
@@ -110,6 +111,22 @@ class TestADBSatCoefficientQoIs(unittest.TestCase):
         self.assertEqual(["C_Y", "C_Y2"], adapter.sim.requested_qois)
         np.testing.assert_allclose(result.values_by_qoi["C_L"], [0.25])
         np.testing.assert_allclose(result.values_by_qoi["C_L2"], [0.0625])
+
+
+class TestEvaluationCacheInvalidation(unittest.TestCase):
+    def test_only_selected_model_is_invalidated_once(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = pathlib.Path(td, "evaluation_cache.json")
+            path.write_text(
+                "{\"shared-key\": {\"value\": \"old\"}}",
+                encoding="utf-8",
+            )
+            cache = EvaluationCache(str(path), invalidate_model_ids={"Sentman"})
+
+            self.assertEqual({"value": "old"}, cache.get("shared-key", model_id="PICLas_TPMC"))
+            self.assertIsNone(cache.get("shared-key", model_id="Sentman"))
+            cache.set("shared-key", {"value": "new"})
+            self.assertEqual({"value": "new"}, cache.get("shared-key", model_id="Sentman"))
 
 
 if __name__ == "__main__":
