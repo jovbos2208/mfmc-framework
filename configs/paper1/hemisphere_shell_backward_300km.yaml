@@ -1,0 +1,243 @@
+study:
+  id: paper1_hemisphere_shell_backward_300km
+  mode: mixed_uncertainty
+  active_source_blocks:
+  - environment.density
+  - environment.temperature
+  - environment.winds
+  - attitude.dispersion
+  - gsi.energy_accommodation
+  - gsi.surface_temperature
+  notes: Preparation only; no solver run has been performed.
+  model_hierarchy: PICLas DSMC (HF); PICLas TPMC and ADBSat Sentman (LF controls)
+sources:
+  blocks:
+  - name: environment.density
+  - name: environment.temperature
+  - name: environment.winds
+  - name: attitude.dispersion
+  - name: gsi.energy_accommodation
+  - name: gsi.surface_temperature
+geometries:
+- id: HemisphereShell_P1
+  name: HemisphereShell_P1
+  characteristic_length: 0.1
+  geometry_class: concave_shell
+  metadata:
+    hf_mesh: geometry/paper1/hemisphere_shell/hemisphere_shell_ro0p05_ri0p048_medium_mesh.h5
+    piclas_object_boundary_name: BENCHMARK_BODY
+    lf_model: HemisphereShell_P1
+    reference_area_m2: 0.007853981633974483
+    reference_area_source: paper1_projected_area
+regimes:
+- id: P1_300KM
+  label: Paper 1 nominal 300 km backward-facing shell fixed state with input uncertainty
+  descriptors:
+    altitude_km: 300.0
+    characteristic_length: 0.1
+    knudsen_number: 44822.18257258183
+    knudsen_definition: 'provisional hard-sphere proxy: lambda=(sqrt(2)*pi*d_eff^2*n_total)^-1,
+      d_eff=3.7e-10 m, first bundled CSV row'
+    density_kg_m3: 1.2187528e-11
+    number_density_m3: 366807900431296.0
+    freestream_temperature: 952.6273
+    composition_descriptor: N2=0.3190349,O2=0.014141078,O=0.65289196,HE=0.0017102571,H=0.00027009072,AR=0.00013092296,N=0.011504504,AO=2.0360602e-07,NO=0.00031608632
+    datetime_utc: '2013-10-21T00:00:00Z'
+    lat_deg: 0.0
+    lon_deg: 0.0
+    f107: 130.0
+    f107a: 130.0
+    ap: 18.0
+    geometry_class: concave_shell
+    surface_state: proxy_bounded
+    speed_ratio: 8.0
+    solar_activity_state: F10.7=F10.7a=130 sfu
+    geomagnetic_activity_state: Ap=18
+    wind_state: HWM14 perturbed
+variables:
+- name: density_state_scale
+  source_block: environment.density
+  distribution:
+    kind: normal
+    params:
+      mean: 1.0
+      std: 0.1
+  baseline: 1.0
+  bounds:
+  - 0.7
+  - 1.5
+- name: temperature_offset_k
+  source_block: environment.temperature
+  distribution:
+    kind: normal
+    params:
+      mean: 0.0
+      std: 100.0
+  baseline: 0.0
+  bounds:
+  - -300.0
+  - 300.0
+- name: wind_east_mps
+  source_block: environment.winds
+  distribution:
+    kind: normal
+    params:
+      mean: 0.0
+      std: 75.0
+  baseline: 0.0
+  bounds:
+  - -250.0
+  - 250.0
+- name: wind_north_mps
+  source_block: environment.winds
+  distribution:
+    kind: normal
+    params:
+      mean: 0.0
+      std: 50.0
+  baseline: 0.0
+  bounds:
+  - -250.0
+  - 250.0
+- name: wind_up_mps
+  source_block: environment.winds
+  distribution:
+    kind: normal
+    params:
+      mean: 0.0
+      std: 15.0
+  baseline: 0.0
+  bounds:
+  - -100.0
+  - 100.0
+- name: aos_deg
+  source_block: attitude.dispersion
+  distribution:
+    kind: normal
+    params:
+      mean: 180.0
+      std: 2.0
+  baseline: 180.0
+  bounds:
+  - 175.0
+  - 185.0
+- name: aoa_deg
+  source_block: attitude.dispersion
+  distribution:
+    kind: normal
+    params:
+      mean: 0.0
+      std: 2.0
+  baseline: 0.0
+  bounds:
+  - -5.0
+  - 5.0
+- name: energy_accommodation
+  source_block: gsi.energy_accommodation
+  distribution:
+    kind: normal
+    params:
+      mean: 0.9
+      std: 0.05
+  baseline: 0.9
+  bounds:
+  - 0.75
+  - 1.0
+- name: wall_temperature_k
+  source_block: gsi.surface_temperature
+  distribution:
+    kind: normal
+    params:
+      mean: 300.0
+      std: 25.0
+  baseline: 300.0
+  bounds:
+  - 250.0
+  - 380.0
+sampling:
+  method: independent
+  sample_count: 64
+  max_production_samples: 2000
+models:
+  hf:
+    id: PICLas_DSMC
+    kind: legacy_piclas
+    kwargs:
+      simulator_module: PICLas
+      mpi_procs: 128
+      piclas_mode: dsmc
+      collision_mode: 2
+      payload_defaults:
+        macro_particle_factor_scale: 10.0
+        momentum_accommodation: 1.0
+        piclas_inflow_boundary_index: 2
+  lf:
+  - id: PICLas_TPMC
+    kind: legacy_piclas_tpmc
+    kwargs:
+      simulator_module: PICLas
+      mpi_procs: 128
+      payload_defaults:
+        momentum_accommodation: 1.0
+        piclas_inflow_boundary_index: 2
+  - id: Sentman
+    kind: legacy_adbsat
+    method: Sentman
+    kwargs:
+      simulator_module: ADBSat
+      base_dir: ADBSat-PyVersion
+  available_qois:
+    PICLas_DSMC:
+    - C_D
+    - C_D2
+    PICLas_TPMC:
+    - C_D
+    - C_D2
+    Sentman:
+    - C_D
+    - C_D2
+qois:
+  direct:
+  - C_D
+  - C_D2
+  derived:
+  - name: Var_C_D
+    expression: E[C_D2]-E[C_D]^2
+  batch_cd_cd2: true
+  single_allocation_all_qois: true
+pilot:
+  size: 32
+  sizes:
+  - 8
+  - 16
+  - 32
+  - 64
+  robustness_repetitions: 50
+  reuse_across_budgets: true
+budget:
+  total:
+  - 1.0
+  min_hf: 2
+  hf_fraction: 0.25
+repetitions: 1
+seeds:
+  global: 20261223
+outputs:
+  dir: campaign_outputs/paper1/hemisphere_shell_backward_300km
+  write_parquet: false
+  write_model_evaluations: true
+  write_config_snapshot: true
+  plots: false
+execution:
+  backend: legacy_slurm
+  resume: false
+  aos_deg: 180.0
+  aoa_deg: 0.0
+  flow_zero_direction:
+  - 1.0
+  - 0.0
+  - 0.0
+  environment:
+    model: pymsis_hwm14
+    use_winds: true
+    apply_wind_to_speed: true
