@@ -58,6 +58,24 @@ class TestADBSatCoefficientQoIs(unittest.TestCase):
             np.testing.assert_allclose(costs, [2.0])
             np.testing.assert_array_equal(indices, [3])
 
+    def test_explicit_result_directories_isolate_parallel_campaigns(self):
+        header = "gsi_model idx C_D C_L C_Y C_Mx C_My C_Mz cpu_time_ms"
+        with tempfile.TemporaryDirectory() as td:
+            sim = ADBSatSimulator(method="SENTMAN", base_dir=td)
+            result_dirs = [pathlib.Path(td, "campaign_a"), pathlib.Path(td, "campaign_b")]
+            for result_dir, cd in zip(result_dirs, (1.25, 2.75)):
+                result_dir.mkdir()
+                pathlib.Path(result_dir, "all_results.txt").write_text(
+                    f"{header}\nSENTMAN 0 {cd} 0 0 0 0 0 1000\n",
+                    encoding="utf-8",
+                )
+
+            first, _, _ = sim.analyze_simulation_results([0], result_dir=result_dirs[0])
+            second, _, _ = sim.analyze_simulation_results([0], result_dir=result_dirs[1])
+
+            np.testing.assert_allclose(first, [1.25])
+            np.testing.assert_allclose(second, [2.75])
+
     def test_legacy_drag_only_coefficients_are_accepted(self):
         with tempfile.TemporaryDirectory() as td:
             self._write_results(

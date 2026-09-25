@@ -1467,14 +1467,19 @@ class LegacyADBSatAdapter(BaseModelAdapter):
         payload.pop("regime_descriptors", None)
         return payload
 
-    def _collect_adbsat_results(self, request: EvaluationRequest, run_ids: List[int]) -> EvaluationResult:
+    def _collect_adbsat_results(
+        self,
+        request: EvaluationRequest,
+        run_ids: List[int],
+        result_dir: Optional[str] = None,
+    ) -> EvaluationResult:
         values_by_qoi = {q: [] for q in request.qois}
         if hasattr(self.sim, "analyze_simulation_results_qois"):
             solver_qois = _solver_qois(list(request.qois), self.qoi_aliases)
-            qoi_data, costs, ret_idx = self.sim.analyze_simulation_results_qois(
-                run_ids,
-                requested_qois=solver_qois,
-            )
+            analyze_kwargs = {"requested_qois": solver_qois}
+            if result_dir is not None:
+                analyze_kwargs["result_dir"] = result_dir
+            qoi_data, costs, ret_idx = self.sim.analyze_simulation_results_qois(run_ids, **analyze_kwargs)
             costs = np.asarray(costs, dtype=float)
             ret_idx = np.asarray(ret_idx, dtype=int)
             ordered_costs = []
@@ -1517,7 +1522,8 @@ class LegacyADBSatAdapter(BaseModelAdapter):
                     )
                 values_by_qoi[q] = ordered_vals
         else:
-            raw = self.sim.analyze_simulation_results(run_ids)
+            analyze_kwargs = {"result_dir": result_dir} if result_dir is not None else {}
+            raw = self.sim.analyze_simulation_results(run_ids, **analyze_kwargs)
             if not isinstance(raw, tuple):
                 raise TypeError("ADBSat adapter expected tuple output")
 
@@ -1571,7 +1577,7 @@ class LegacyADBSatAdapter(BaseModelAdapter):
                 output_dir = Path(str(cfg.get("output_dir", "paper_postprocessed/field_inputs"))) / _slug_for_path(case_name)
                 output_path = output_dir / str(cfg.get("filename", "SENTMAN_surface_loads.npz"))
             summary = export_adbsat_surface_archive(
-                result_dir=os.path.join(self.sim.base_dir, f"MFMC_Jobs_{self.method}"),
+                result_dir=result_dir or os.path.join(self.sim.base_dir, f"MFMC_Jobs_{self.method}"),
                 method=self.method,
                 run_ids=run_ids,
                 sample_ids=request.sample_ids,
@@ -1603,8 +1609,9 @@ class LegacyADBSatAdapter(BaseModelAdapter):
         run_ids = list(range(len(request.samples)))
         env_model = str(request.metadata.get("environment_model", request.metadata.get("env_model", "csv")))
 
-        job_subdir = os.path.join(self.sim.base_dir, f"MFMC_Jobs_{self.method}")
-        os.makedirs(job_subdir, exist_ok=True)
+        job_root = os.path.join(self.sim.base_dir, f"MFMC_Jobs_{self.method}")
+        os.makedirs(job_root, exist_ok=True)
+        job_subdir = tempfile.mkdtemp(prefix="request_", dir=job_root)
         payloads = []
         for pos, db_idx in enumerate(database_indices):
             sample = request.samples[pos] if pos < len(request.samples) else {"database_index": db_idx}
@@ -1621,10 +1628,15 @@ class LegacyADBSatAdapter(BaseModelAdapter):
             input_file = f.name
 
         for attempt in range(self.missing_results_retries + 1):
-            job_id, _ = self.sim.queue_simulation_job(altitude, aos, input_file)
+            job_id, result_dir = self.sim.queue_simulation_job(
+                altitude,
+                aos,
+                input_file,
+                work_dir=job_subdir,
+            )
             self.sim._wait_for_job_completion(job_id)
             try:
-                return self._collect_adbsat_results(request, run_ids)
+                return self._collect_adbsat_results(request, run_ids, result_dir=result_dir)
             except FileNotFoundError as exc:
                 if attempt >= self.missing_results_retries:
                     raise

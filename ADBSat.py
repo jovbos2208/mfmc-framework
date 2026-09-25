@@ -72,12 +72,14 @@ class ADBSatSimulator:
     def _repo_root(self):
         return os.path.dirname(self.base_dir)
 
-    def queue_simulation_job(self, altitude, AoS, input_file):
+    def queue_simulation_job(self, altitude, AoS, input_file, work_dir=None):
         """
         Erstellt und submitet einen SLURM-Job für die Simulation mit `simulate.py`,
         wartet auf den Abschluss und gibt den Jobpfad zurück.
         """
-        job_subdir = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}")
+        job_subdir = os.path.abspath(
+            work_dir or os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}")
+        )
         os.makedirs(job_subdir, exist_ok=True)
         job_script_path = os.path.join(job_subdir, f"job_{self.method}.sh")
 
@@ -107,7 +109,7 @@ class ADBSatSimulator:
             "set -euo pipefail",
             "cd $SLURM_SUBMIT_DIR",
             "",
-            f"cd {job_subdir}",
+            f"cd {shlex.quote(job_subdir)}",
             "",
             "rm -f all_results.txt",
             command_line,
@@ -169,11 +171,14 @@ class ADBSatSimulator:
                 break
             time.sleep(poll_interval)
 
-    def analyze_simulation_results(self, indices):
+    def analyze_simulation_results(self, indices, result_dir=None):
         """
         Liest `all_results.txt` und gibt C_D und CPU-Zeiten zurück.
         """
-        result_file = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}", "all_results.txt")
+        result_dir = os.path.abspath(
+            result_dir or os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}")
+        )
+        result_file = os.path.join(result_dir, "all_results.txt")
         if not os.path.exists(result_file):
             raise FileNotFoundError(f"Results file {result_file} not found!")
 
@@ -212,7 +217,7 @@ class ADBSatSimulator:
 
         return np.array(Fd_values), np.array(cpu_times), np.array(idx_array)
 
-    def analyze_simulation_results_qois(self, indices, requested_qois=None):
+    def analyze_simulation_results_qois(self, indices, requested_qois=None, result_dir=None):
         """
         Read all_results.txt and return requested aerodynamic coefficient QoIs.
         Returns:
@@ -223,7 +228,10 @@ class ADBSatSimulator:
         if requested_qois is None:
             requested_qois = ["C_D"]
 
-        result_file = os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}", "all_results.txt")
+        result_dir = os.path.abspath(
+            result_dir or os.path.join(self.base_dir, f"MFMC_Jobs_{self.method}")
+        )
+        result_file = os.path.join(result_dir, "all_results.txt")
         if not os.path.exists(result_file):
             raise FileNotFoundError(f"Results file {result_file} not found!")
 
