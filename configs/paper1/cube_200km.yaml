@@ -24,7 +24,7 @@ geometries:
   characteristic_length: 0.1
   geometry_class: cube
   metadata:
-    hf_mesh: Cube_P1_0p1m_mesh.h5
+    hf_mesh: Cube_mesh.h5
     piclas_object_boundary_name: CUBE
     lf_model: Cube_P1_0p1m
     reference_area_m2: 0.01
