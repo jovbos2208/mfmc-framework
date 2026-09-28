@@ -121,7 +121,10 @@ estimator:
   # Estimate rho and beta locally at every angle from coupled production runs.
   # These samples remain part of the final MFMC production estimate.
   weight_source: production
-  weight_sample_count: 32
+  weight_sample_count: 50
+  # If the external pilot CSV is absent, evaluate 50 coupled pairs once and
+  # reuse them as the prefix of the production sample instead of discarding them.
+  reuse_fallback_pilot: true
 
 pilot:
   size: 50
@@ -149,8 +152,8 @@ budget:
   # Validation fallback before the pilot exists; the pilot-derived value
   # replaces it when the production config is loaded after step 1.
   total: [20.0]
-  # At least 32 coupled production pairs are required for local rho/beta.
-  min_hf: 32
+  # At least 50 coupled pairs are needed so the fallback pilot is fully reused.
+  min_hf: 50
   hf_fraction: 0.0
 
 repetitions: 1

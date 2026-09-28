@@ -86,6 +86,42 @@ def _to_eval_result(payload: Dict[str, Any]):
     )
 
 
+def _merge_reused_prefix(
+    prefix: EvaluationResult,
+    suffix: EvaluationResult,
+    prefix_count: int,
+    sample_ids: List[str],
+    qois: List[str],
+) -> EvaluationResult:
+    """Combine reused pilot evaluations with newly evaluated production suffix."""
+    prefix_count = max(0, min(int(prefix_count), len(sample_ids)))
+    values_by_qoi = {
+        qoi: list(prefix.values_by_qoi.get(qoi, []))[:prefix_count]
+        + list(suffix.values_by_qoi.get(qoi, []))
+        for qoi in qois
+    }
+    costs = list(prefix.costs)[:prefix_count] + list(suffix.costs)
+    if any(len(values) != len(sample_ids) for values in values_by_qoi.values()):
+        raise ValueError("reused pilot prefix and production suffix have inconsistent QoI lengths")
+    if len(costs) != len(sample_ids):
+        raise ValueError("reused pilot prefix and production suffix have inconsistent cost lengths")
+    return EvaluationResult(
+        values_by_qoi=values_by_qoi,
+        costs=costs,
+        sample_ids=list(sample_ids),
+        metadata={**dict(prefix.metadata), **dict(suffix.metadata), "reused_pilot_prefix": prefix_count},
+    )
+
+
+def _empty_evaluation_result(qois: List[str], metadata: Dict[str, Any]) -> EvaluationResult:
+    return EvaluationResult(
+        values_by_qoi={qoi: [] for qoi in qois},
+        costs=[],
+        sample_ids=[],
+        metadata=dict(metadata),
+    )
+
+
 def _cache_key_for_request(request, qoi: str, phase: str) -> str:
     return _hash_samples(
         model_id=request.model_id,
@@ -2175,14 +2211,25 @@ def run_campaign(
                 flush=True,
             )
 
-        prod_samples_full = input_model.sample(n_lf, context, rng)
+        reuse_fallback_pilot = (
+            bool(cfg.get("estimator", {}).get("reuse_fallback_pilot", False))
+            and str(cfg.get("estimator", {}).get("weight_source", "pilot")) == "production"
+            and not partial_external_pilot_used
+            and not skip_pilot_model_evaluations
+            and not multi_lf_cell
+            and not paper_mfmc_cell
+        )
+        reused_pair_count = min(cell.pilot_size, n_hf, n_lf) if reuse_fallback_pilot else 0
+        additional_samples = input_model.sample(n_lf - reused_pair_count, context, rng)
+        prod_samples_full = list(pilot_samples[:reused_pair_count]) + list(additional_samples)
         _validate_trajectory_samples(cfg, prod_samples_full, "production", cid)
         prod_ids_full = [f"prod_{i}" for i in range(n_lf)]
 
         prod_samples_hf = prod_samples_full[:n_hf]
         prod_ids_hf = prod_ids_full[:n_hf]
         print(
-            f"[production] samples ready hf={len(prod_samples_hf)} lf_full={len(prod_samples_full)}",
+            f"[production] samples ready hf={len(prod_samples_hf)} lf_full={len(prod_samples_full)} "
+            f"reused_fallback_pairs={reused_pair_count}",
             flush=True,
         )
 
@@ -2244,42 +2291,91 @@ def run_campaign(
                     metadata=meta,
                 )
 
-        production_jobs: List[Tuple[str, Any, Any, str, str]] = [
-            ("__prod_hf__", hf_adapter, prod_hf_req, eval_qoi_key, "prod_hf")
-        ]
+        prod_hf_eval_req = make_request(
+            study_id=cell.study_id, cell_id=cid, model_id=cell.hf_model_id, fidelity="hf",
+            qois=eval_qois, geometry=geometry, regime=regime,
+            active_source_blocks=cell.active_source_blocks,
+            sample_ids=prod_ids_hf[reused_pair_count:], samples=prod_samples_hf[reused_pair_count:],
+            seed=cell.seed + 101, metadata=meta,
+        )
+        prod_lf_full_eval_reqs = {}
+        prod_lf_pair_eval_reqs = {}
+        for lf_idx, lf_model_id in enumerate(lf_model_ids):
+            full_req = prod_lf_full_reqs.get(lf_model_id)
+            if full_req is not None:
+                prod_lf_full_eval_reqs[lf_model_id] = make_request(
+                    study_id=cell.study_id, cell_id=cid, model_id=lf_model_id, fidelity="lf",
+                    qois=eval_qois, geometry=geometry, regime=regime,
+                    active_source_blocks=cell.active_source_blocks,
+                    sample_ids=full_req.sample_ids[reused_pair_count:],
+                    samples=full_req.samples[reused_pair_count:], seed=cell.seed + 203 + lf_idx, metadata=meta,
+                )
+            if not paper_mfmc_cell:
+                pair_req = prod_lf_pair_reqs[lf_model_id]
+                prod_lf_pair_eval_reqs[lf_model_id] = make_request(
+                    study_id=cell.study_id, cell_id=cid, model_id=lf_model_id, fidelity="lf",
+                    qois=eval_qois, geometry=geometry, regime=regime,
+                    active_source_blocks=cell.active_source_blocks,
+                    sample_ids=pair_req.sample_ids[reused_pair_count:],
+                    samples=pair_req.samples[reused_pair_count:], seed=cell.seed + 307 + lf_idx, metadata=meta,
+                )
+
+        production_jobs: List[Tuple[str, Any, Any, str, str]] = []
+        if prod_hf_eval_req.samples:
+            production_jobs.append(("__prod_hf__", hf_adapter, prod_hf_eval_req, eval_qoi_key, "prod_hf"))
         prod_lf_full_results = {}
         prod_lf_pair_results = {}
         for lf_model_id in lf_model_ids:
             lf_adapter = registry.get(lf_model_id)
-            if lf_model_id in prod_lf_full_reqs:
+            if lf_model_id in prod_lf_full_eval_reqs and prod_lf_full_eval_reqs[lf_model_id].samples:
                 production_jobs.append(
                     (
                         f"{lf_model_id}__full",
                         lf_adapter,
-                        prod_lf_full_reqs[lf_model_id],
+                        prod_lf_full_eval_reqs[lf_model_id],
                         eval_qoi_key,
                         "prod_lf_full",
                     )
                 )
-            if not paper_mfmc_cell:
+            if not paper_mfmc_cell and prod_lf_pair_eval_reqs[lf_model_id].samples:
                 production_jobs.append(
                     (
                         f"{lf_model_id}__pair",
                         lf_adapter,
-                        prod_lf_pair_reqs[lf_model_id],
+                        prod_lf_pair_eval_reqs[lf_model_id],
                         eval_qoi_key,
                         "prod_lf_pair",
                     )
                 )
         production_results = _evaluate_many_with_cache(cache, production_jobs)
-        prod_hf_res = production_results["__prod_hf__"]
+        hf_suffix = production_results.get("__prod_hf__", _empty_evaluation_result(eval_qois, meta))
+        prod_hf_res = (
+            _merge_reused_prefix(pilot_hf_res, hf_suffix, reused_pair_count, prod_ids_hf, eval_qois)
+            if reused_pair_count
+            else hf_suffix
+        )
         for lf_model_id in lf_model_ids:
-            prod_lf_full_results[lf_model_id] = production_results.get(
-                f"{lf_model_id}__full",
-                empty_lf_results[lf_model_id],
+            lf_full_suffix = production_results.get(
+                f"{lf_model_id}__full", _empty_evaluation_result(eval_qois, meta)
+            )
+            prod_lf_full_results[lf_model_id] = (
+                _merge_reused_prefix(
+                    pilot_lf_results[lf_model_id], lf_full_suffix, reused_pair_count,
+                    prod_lf_full_reqs[lf_model_id].sample_ids, eval_qois,
+                )
+                if reused_pair_count else lf_full_suffix
             )
             if not paper_mfmc_cell:
-                prod_lf_pair_results[lf_model_id] = production_results[f"{lf_model_id}__pair"]
+                lf_pair_suffix = production_results.get(
+                    f"{lf_model_id}__pair", _empty_evaluation_result(eval_qois, meta)
+                )
+                prod_lf_pair_results[lf_model_id] = (
+                    _merge_reused_prefix(
+                        pilot_lf_results[lf_model_id], lf_pair_suffix, reused_pair_count,
+                        prod_ids_hf, eval_qois,
+                    )
+                    if reused_pair_count else lf_pair_suffix
+                )
         if cfg.get("outputs", {}).get("write_model_evaluations", True):
             _append_model_evaluation_rows(store, cell, prod_hf_req, prod_hf_res, "prod_hf")
             for lf_model_id in lf_model_ids:
@@ -2558,6 +2654,8 @@ def run_campaign(
             flags = statistical_flags(metrics)
             if production_weights_used:
                 flags.append("production_weights_used")
+            if reused_pair_count:
+                flags.append(f"reused_fallback_pilot={reused_pair_count}")
             if result_qoi != cell.qoi:
                 flags.append(f"batched_with_{cell.qoi}")
             if pilot_corr_used:

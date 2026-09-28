@@ -284,6 +284,7 @@ def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     cfg.setdefault("estimator", {})
     cfg["estimator"].setdefault("weight_source", "pilot")
     cfg["estimator"].setdefault("weight_sample_count", None)
+    cfg["estimator"].setdefault("reuse_fallback_pilot", False)
 
     cfg.setdefault("budget", {})
     cfg["budget"].setdefault("total", 100.0)

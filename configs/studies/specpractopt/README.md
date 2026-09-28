@@ -47,3 +47,9 @@ still supplies the enlarged ADBSat mean. External pilot statistics may still
 drive the pre-run budget allocation, but they cannot override the final
 production-derived coefficient in this mode. Omitting the `estimator` block
 retains the legacy `pilot` behavior.
+
+For the GSI angle grid, `reuse_fallback_pilot: true` additionally makes a missing
+external pilot a reusable production prefix: the configured 50 coupled HF/LF
+pairs are evaluated once, used for allocation and local weights, and retained
+as production samples. Only samples beyond that prefix are submitted as new
+production evaluations. Result flags record `reused_fallback_pilot=50`.
