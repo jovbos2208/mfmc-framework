@@ -34,3 +34,16 @@ The angle-grid estimator assumes that the paired-pilot HF/LF correlations and
 control-variate coefficients obtained at `AoS=45 deg`, `AoA=0 deg` remain
 representative throughout the full `[-90, 90] deg` AoS sweep at fixed
 `AoA=0 deg`.
+
+## Production-derived MFMC weights
+
+`cylinder_hex_maxwell_angle_grid_mfmc.yaml` uses
+`estimator.weight_source: production` with `weight_sample_count: 32`. For every
+angle and QoI, the first 32 fingerprint-coupled `prod_hf`/`prod_lf_pair`
+evaluations determine the correlation and control-variate coefficient. Those
+same evaluations remain in the complete production-pair mean used by the final
+MFMC estimator; they are not discarded as a separate pilot. `prod_lf_full`
+still supplies the enlarged ADBSat mean. External pilot statistics may still
+drive the pre-run budget allocation, but they cannot override the final
+production-derived coefficient in this mode. Omitting the `estimator` block
+retains the legacy `pilot` behavior.

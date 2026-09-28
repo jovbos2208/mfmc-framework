@@ -85,6 +85,21 @@ class TestConfigValidation(unittest.TestCase):
         errors, _ = validate_config(cfg)
         self.assertTrue(any("exactly 2" in e.message for e in errors))
 
+    def test_production_weight_source_is_valid(self):
+        cfg = base_config()
+        cfg["estimator"] = {"weight_source": "production", "weight_sample_count": 32}
+        errors, _ = validate_config(cfg)
+        self.assertFalse(any(issue.path.startswith("estimator") for issue in errors))
+
+    def test_invalid_estimator_weight_settings_are_rejected(self):
+        cfg = base_config()
+        cfg["estimator"] = {"weight_source": "unknown", "weight_sample_count": 1}
+        errors, _ = validate_config(cfg)
+        self.assertEqual(
+            {"estimator.weight_source", "estimator.weight_sample_count"},
+            {issue.path for issue in errors if issue.path.startswith("estimator")},
+        )
+
     def test_attitude_grid_expands_to_cartesian_regimes(self):
         raw = base_config()
         raw["study"]["attitude_grid"] = {

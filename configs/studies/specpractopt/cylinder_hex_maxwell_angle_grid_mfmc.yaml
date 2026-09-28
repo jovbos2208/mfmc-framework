@@ -126,6 +126,11 @@ qois:
     expression: E[C_L2]-E[C_L]^2
   batch_cd_cd2: false
   single_allocation_all_qois: true
+estimator:
+  # Estimate beta from the first 32 coupled TPMC/ADBSat production pairs.
+  # The same pairs remain part of the final production estimator.
+  weight_source: production
+  weight_sample_count: 32
 pilot:
   size: 50
   sizes:

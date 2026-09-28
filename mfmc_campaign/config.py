@@ -281,6 +281,10 @@ def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     cfg["pilot"].setdefault("sizes", [8, 16, 32, 64])
     cfg["pilot"].setdefault("robustness_repetitions", 20)
 
+    cfg.setdefault("estimator", {})
+    cfg["estimator"].setdefault("weight_source", "pilot")
+    cfg["estimator"].setdefault("weight_sample_count", None)
+
     cfg.setdefault("budget", {})
     cfg["budget"].setdefault("total", 100.0)
     cfg["budget"].setdefault("hf_fraction", 0.25)
@@ -400,6 +404,30 @@ def validate_config(config: Dict[str, Any]) -> Tuple[List[ValidationIssue], List
     mode = str(config.get("study", {}).get("mode", ""))
     if mode not in {m.value for m in StudyMode}:
         errors.append(ValidationIssue("error", f"Unknown study mode '{mode}'", "study.mode"))
+
+    estimator_cfg = config.get("estimator", {})
+    weight_source = str(estimator_cfg.get("weight_source", "pilot"))
+    if weight_source not in {"pilot", "production"}:
+        errors.append(
+            ValidationIssue(
+                "error",
+                "estimator.weight_source must be 'pilot' or 'production'",
+                "estimator.weight_source",
+            )
+        )
+    weight_sample_count = estimator_cfg.get("weight_sample_count")
+    if weight_sample_count is not None and (
+        not isinstance(weight_sample_count, int)
+        or isinstance(weight_sample_count, bool)
+        or weight_sample_count < 2
+    ):
+        errors.append(
+            ValidationIssue(
+                "error",
+                "estimator.weight_sample_count must be null or an integer >= 2",
+                "estimator.weight_sample_count",
+            )
+        )
 
     source_names = set(_source_block_names(config))
     if not source_names:

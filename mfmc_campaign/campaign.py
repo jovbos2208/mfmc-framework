@@ -18,7 +18,10 @@ from .estimator import (
     compute_multi_lf_mfmc_diagnostics,
     compute_paper_mfmc_diagnostics,
     derive_quantities,
+    linear_r2,
+    pearson_corr,
     pilot_robustness_metrics,
+    spearman_corr,
     statistical_flags,
 )
 from .experiments import generate_experiment_cells
@@ -2454,11 +2457,38 @@ def run_campaign(
                 else float("nan")
             )
 
+            estimator_cfg = cfg.get("estimator", {})
+            estimator_weight_source = str(estimator_cfg.get("weight_source", "pilot"))
+            estimator_weight_count_raw = estimator_cfg.get("weight_sample_count")
+            estimator_weight_count = (
+                int(estimator_weight_count_raw) if estimator_weight_count_raw is not None else None
+            )
+            production_weights_used = estimator_weight_source == "production"
+            if production_weights_used:
+                weight_stop = estimator_weight_count
+                qoi_weight_hf = qoi_prod_hf[:weight_stop]
+                qoi_weight_lfs = {
+                    lf_model_id: values[:weight_stop]
+                    for lf_model_id, values in qoi_prod_lf_paired_by_id.items()
+                }
+                available_weight_pairs = min(
+                    [qoi_weight_hf.size] + [values.size for values in qoi_weight_lfs.values()]
+                )
+                required_weight_pairs = estimator_weight_count if estimator_weight_count is not None else 2
+                if available_weight_pairs < required_weight_pairs:
+                    raise ValueError(
+                        f"estimator.weight_source=production requires {required_weight_pairs} paired "
+                        f"production samples for qoi={result_qoi}, but only {available_weight_pairs} are available"
+                    )
+            else:
+                qoi_weight_hf = qoi_pilot_hf
+                qoi_weight_lfs = qoi_pilot_lfs
+
             if paper_mfmc_cell:
                 metrics = compute_paper_mfmc_diagnostics(
                     qoi=result_qoi,
-                    pilot_hf=qoi_pilot_hf,
-                    pilot_lfs=qoi_pilot_lfs,
+                    pilot_hf=qoi_weight_hf,
+                    pilot_lfs=qoi_weight_lfs,
                     prod_hf=qoi_prod_hf,
                     prod_lf_full=qoi_prod_lf_full_by_id,
                     lf_sample_counts={
@@ -2473,8 +2503,8 @@ def run_campaign(
             elif multi_lf_cell:
                 metrics = compute_multi_lf_mfmc_diagnostics(
                     qoi=result_qoi,
-                    pilot_hf=qoi_pilot_hf,
-                    pilot_lfs=qoi_pilot_lfs,
+                    pilot_hf=qoi_weight_hf,
+                    pilot_lfs=qoi_weight_lfs,
                     prod_hf=qoi_prod_hf,
                     prod_lf_full=qoi_prod_lf_full_by_id,
                     prod_lf_paired=qoi_prod_lf_paired_by_id,
@@ -2485,8 +2515,8 @@ def run_campaign(
             else:
                 metrics = compute_mfmc_diagnostics(
                     qoi=result_qoi,
-                    pilot_hf=qoi_pilot_hf,
-                    pilot_lf=qoi_pilot_lfs[lf_model_ids[0]],
+                    pilot_hf=qoi_weight_hf,
+                    pilot_lf=qoi_weight_lfs[lf_model_ids[0]],
                     prod_hf=qoi_prod_hf,
                     prod_lf_full=qoi_prod_lf_full_by_id[lf_model_ids[0]],
                     prod_lf_paired=qoi_prod_lf_paired_by_id[lf_model_ids[0]],
@@ -2495,28 +2525,39 @@ def run_campaign(
                     reference=qoi_reference,
                 )
 
+            if production_weights_used and not multi_lf_cell and not paper_mfmc_cell:
+                paired_lf = qoi_weight_lfs[lf_model_ids[0]]
+                production_pearson = pearson_corr(qoi_weight_hf, paired_lf)
+                metrics["rho_hat"] = production_pearson
+                metrics["pearson_correlation"] = production_pearson
+                metrics["spearman_correlation"] = spearman_corr(qoi_weight_hf, paired_lf)
+                metrics["r2_lin_hat"] = linear_r2(qoi_weight_hf, paired_lf)
+
             metrics.update(
                 beta_stability_metrics(
-                    pilot_hf=qoi_pilot_hf,
-                    pilot_lf=qoi_pilot_lfs[lf_model_ids[0]],
+                    pilot_hf=qoi_weight_hf,
+                    pilot_lf=qoi_weight_lfs[lf_model_ids[0]],
                     repetitions=robust_reps,
                     rng=rng,
                 )
             )
             pilot_corr_used = False
-            if not paper_mfmc_cell:
-                pilot_corr_used = _apply_external_pilot_robustness(
-                    metrics,
-                    qoi_external_robustness,
-                    lf_model_ids=lf_model_ids,
-                    prod_lf_full_by_id=qoi_prod_lf_full_by_id,
-                    prod_lf_paired_by_id=qoi_prod_lf_paired_by_id,
-                    reference=qoi_reference,
-                )
-            if not pilot_corr_used:
-                pilot_corr_used = _use_pilot_correlation(metrics, qoi_robust_rows, cell.pilot_size)
+            if not production_weights_used:
+                if not paper_mfmc_cell:
+                    pilot_corr_used = _apply_external_pilot_robustness(
+                        metrics,
+                        qoi_external_robustness,
+                        lf_model_ids=lf_model_ids,
+                        prod_lf_full_by_id=qoi_prod_lf_full_by_id,
+                        prod_lf_paired_by_id=qoi_prod_lf_paired_by_id,
+                        reference=qoi_reference,
+                    )
+                if not pilot_corr_used:
+                    pilot_corr_used = _use_pilot_correlation(metrics, qoi_robust_rows, cell.pilot_size)
 
             flags = statistical_flags(metrics)
+            if production_weights_used:
+                flags.append("production_weights_used")
             if result_qoi != cell.qoi:
                 flags.append(f"batched_with_{cell.qoi}")
             if pilot_corr_used:
