@@ -117,6 +117,12 @@ qois:
   batch_cd_cd2: false
   single_allocation_all_qois: true
 
+estimator:
+  # Estimate rho and beta locally at every angle from coupled production runs.
+  # These samples remain part of the final MFMC production estimate.
+  weight_source: production
+  weight_sample_count: 32
+
 pilot:
   size: 50
   sizes: [50]
@@ -143,7 +149,8 @@ budget:
   # Validation fallback before the pilot exists; the pilot-derived value
   # replaces it when the production config is loaded after step 1.
   total: [20.0]
-  min_hf: 1
+  # At least 32 coupled production pairs are required for local rho/beta.
+  min_hf: 32
   hf_fraction: 0.0
 
 repetitions: 1
