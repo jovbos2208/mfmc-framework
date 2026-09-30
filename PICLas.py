@@ -1044,8 +1044,12 @@ class PiclasSimulator:
                 for subdir in pending_subdirs_by_id.get(str(job_id), []):
                     if subdir in failed_set and self._valid_node_name(node):
                         excluded_nodes_by_subdir[subdir].add(node)
-                        if state in {"FAILED", "NODE_FAIL", "BOOT_FAIL"}:
-                            newly_bad_nodes.add(node)
+                        # Missing required outputs mean that this allocation failed
+                        # from the production workflow's perspective. Persist the
+                        # node independently of Slurm's exact terminal state (for
+                        # example FAILED, NODE_FAIL, TIMEOUT or OUT_OF_MEMORY), so
+                        # later retries and concurrently prepared jobs avoid it too.
+                        newly_bad_nodes.add(node)
             self._record_bad_nodes(newly_bad_nodes)
 
             if retry_count >= max_retries:
