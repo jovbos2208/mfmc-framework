@@ -803,6 +803,10 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             self.assertNotIn("scontrol requeue", script)
             self.assertIn("--kill-on-bad-exit=1", script)
             self.assertNotIn("mpirun", script)
+            self.assertNotIn("--mpi=none", script)
+            self.assertIn("No supported srun MPI plugin found", script)
+            self.assertIn("export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}", script)
+            self.assertIn("export OPENBLAS_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}", script)
             subprocess.run(["bash", "-n", script_path], check=True)
 
     def test_group_job_script_launches_piclas_directly_with_srun(self):
@@ -826,6 +830,10 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             self.assertNotIn("scontrol requeue", script)
             self.assertNotIn("success_marker", script)
             self.assertNotIn("mpirun", script)
+            self.assertNotIn("--mpi=none", script)
+            self.assertIn("No supported srun MPI plugin found", script)
+            self.assertIn("export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}", script)
+            self.assertIn("export OPENBLAS_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}", script)
             subprocess.run(["bash", "-n", script_path], check=True)
 
 
