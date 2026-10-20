@@ -195,13 +195,27 @@ def _resolve_piclas_surface_parameters(payload: Dict[str, Any]) -> Dict[str, flo
         float(_payload_value(payload, ["rot_accommodation"], surface_defaults.get("rot_accommodation", 1.0)))
     )
 
-    return {
+    result = {
         "wall_temperature_k": wall_temp,
         "trans_accommodation": trans_acc,
         "momentum_accommodation": momentum_acc,
         "vib_accommodation": vib_acc,
         "rot_accommodation": rot_acc,
     }
+    cll_alpha_n = _payload_value(payload, ["cll_alpha_n"], None)
+    cll_sigma_t = _payload_value(payload, ["cll_sigma_t"], None)
+    if (cll_alpha_n is None) != (cll_sigma_t is None):
+        raise ValueError("PICLas CLL requires both cll_alpha_n and cll_sigma_t")
+    if cll_alpha_n is not None:
+        alpha_n = float(cll_alpha_n)
+        sigma_t = float(cll_sigma_t)
+        if not np.isfinite(alpha_n) or not 0.0 <= alpha_n <= 1.0:
+            raise ValueError("cll_alpha_n must be finite and in [0, 1]")
+        if not np.isfinite(sigma_t) or not 0.0 <= sigma_t <= 2.0:
+            raise ValueError("cll_sigma_t must be finite and in [0, 2]")
+        result["cll_alpha_n"] = alpha_n
+        result["cll_sigma_t"] = sigma_t
+    return result
 
 
 def _resolve_piclas_numerical_controls(payload: Dict[str, Any], computed_mpf: float) -> Dict[str, float | int]:
@@ -897,6 +911,8 @@ def update_ini_from_csv(
     wall_temp = float(surface_params["wall_temperature_k"])
     trans_acc = float(surface_params["trans_accommodation"])
     momentum_acc = float(surface_params["momentum_accommodation"])
+    cll_alpha_n = surface_params.get("cll_alpha_n")
+    cll_sigma_t = surface_params.get("cll_sigma_t")
     vib_acc = float(surface_params["vib_accommodation"])
     rot_acc = float(surface_params["rot_accommodation"])
     mpf = float(numerical_controls["macro_particle_factor"])
@@ -941,6 +957,13 @@ def update_ini_from_csv(
         ["piclas_surface_model_scattering"],
         None,
     )
+    if cll_alpha_n is not None:
+        if surface_model_scattering is None:
+            surface_model_scattering = 1
+        if int(surface_model_scattering) != 1:
+            raise ValueError(
+                "Canonical CLL parameters require piclas_surface_model_scattering=1"
+            )
     debug_payload = {
         "geometry_id": payload.get("geometry_id"),
         "geometry_name": payload.get("geometry_name"),
@@ -1044,10 +1067,11 @@ def update_ini_from_csv(
         if seed_2 == seed_1:
             seed_2 = ((seed_1 + 1) % (2**31 - 1)) or 2
 
-    boundary_pattern = re.compile(r"\s*Part-Boundary(\d+)-([A-Za-z0-9]+)")
+    boundary_pattern = re.compile(r"\s*Part-Boundary(\d+)-([A-Za-z0-9-]+)")
     surface_keys = {
         "WallTemp", "TransACC", "MomentumACC", "VibACC", "RotACC",
         "SurfaceModel", "SurfaceModelScattering",
+        "CLL-AlphaN", "CLL-SigmaT",
     }
     only_scattering = (
         surface_model is not None
@@ -1069,6 +1093,9 @@ def update_ini_from_csv(
         object_values["SurfaceModel"] = str(int(surface_model))
     if surface_model_scattering is not None:
         object_values["SurfaceModelScattering"] = str(int(surface_model_scattering))
+    if cll_alpha_n is not None and cll_sigma_t is not None:
+        object_values["CLL-AlphaN"] = f"{float(cll_alpha_n):.16g}"
+        object_values["CLL-SigmaT"] = f"{float(cll_sigma_t):.16g}"
     seen_object_keys = set()
 
     for line in ini_lines:

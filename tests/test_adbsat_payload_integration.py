@@ -39,6 +39,22 @@ def _fake_mesh(n_elems: int = 4):
 
 
 class TestADBSatPayloadIntegration(unittest.TestCase):
+    def test_canonical_cll_parameters_bind_without_semantic_translation(self):
+        resolved = adbsat_simulate._resolve_surface_parameters(
+            {"cll_alpha_n": 0.31, "cll_sigma_t": 1.42, "wall_temperature_k": 300.0}
+        )
+        self.assertAlmostEqual(0.31, resolved["alphaN"])
+        self.assertAlmostEqual(1.42, resolved["sigmaT"])
+        self.assertAlmostEqual(300.0, resolved["Tw"])
+
+    def test_canonical_cll_sigma_t_domain_extends_to_two(self):
+        self.assertAlmostEqual(
+            1.8,
+            adbsat_simulate._resolve_surface_parameters({"cll_alpha_n": 0.5, "cll_sigma_t": 1.8})["sigmaT"],
+        )
+        with self.assertRaisesRegex(ValueError, "sigma_t"):
+            adbsat_simulate._resolve_surface_parameters({"cll_alpha_n": 0.5, "cll_sigma_t": 2.1})
+
     def test_generated_geometry_id_resolves_direct_runtime_assets(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = pathlib.Path(tmp)

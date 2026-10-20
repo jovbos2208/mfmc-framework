@@ -284,6 +284,37 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
         self.assertIn("Part-Boundary3-Condition   = open", ini_text)
         self.assertNotIn("Part-Boundary3-MomentumACC", ini_text)
 
+    def test_update_parameter_writes_canonical_cll_parameters_without_maxwell_remapping(self):
+        payload = {
+            "geometry_id": "SpecPractOpt_cylinder_hex",
+            "hf_mesh": "SpecPractOpt_cylinder_hex_mesh.h5",
+            "rho": [1.0e11, 2.0e11, 3.0e11, 4.0e11, 5.0e10, 6.0e9, 7.0e9, 8.0e9, 9.0e9, 1.0e-9],
+            "Tinf": 900.0,
+            "piclas_object_boundary_name": "OBJ",
+            "piclas_object_boundary_index": 2,
+            "piclas_surface_model": 0,
+            "piclas_surface_model_scattering": 1,
+            "wall_temperature_k": 300.0,
+            "cll_alpha_n": 0.37,
+            "cll_sigma_t": 0.82,
+        }
+        with tempfile.TemporaryDirectory() as td:
+            ini_path = os.path.join(td, "parameter.ini")
+            payload_path = os.path.join(td, "payload.json")
+            shutil.copyfile(UPDATE_PARAMETER_DIR / "parameter.ini", ini_path)
+            with open(payload_path, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle)
+            piclas_update.update_ini_from_csv(200, 0.0, 0, ini_path, env_payload_path=payload_path)
+            ini_text = pathlib.Path(ini_path).read_text(encoding="utf-8")
+        self.assertIn("Part-Boundary2-SurfaceModelScattering = 1", ini_text)
+        self.assertIn("Part-Boundary2-CLL-AlphaN = 0.37", ini_text)
+        self.assertIn("Part-Boundary2-CLL-SigmaT = 0.82", ini_text)
+        self.assertNotIn("Part-Boundary3-CLL-AlphaN", ini_text)
+
+    def test_update_parameter_rejects_incomplete_canonical_cll_pair(self):
+        with self.assertRaisesRegex(ValueError, "requires both"):
+            piclas_update._resolve_piclas_surface_parameters({"cll_alpha_n": 0.5})
+
     def test_geometry_rewrite_preserves_boundary2_as_object(self):
         with tempfile.TemporaryDirectory() as td:
             ini_path = pathlib.Path(td, "parameter.ini")
@@ -540,6 +571,30 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             )
             self.assertEqual(
                 "cn0231\ncn0768\n",
+                pathlib.Path(td, "bad_nodes.txt").read_text(encoding="utf-8"),
+            )
+
+    def test_piclas_persists_node_for_failed_output_even_when_slurm_reports_timeout(self):
+        with tempfile.TemporaryDirectory() as td:
+            retry_dir = os.path.join(td, "job_retry")
+            os.makedirs(retry_dir, exist_ok=True)
+
+            sim = PiclasSimulator(piclas_dir=td, job_template="job_piclas.sh")
+
+            with patch.object(sim, "_wait_for_all_jobs_completion", return_value=None), patch.object(
+                sim,
+                "_query_job_nodes",
+                return_value={"job-1": {"node": "cn0420", "state": "TIMEOUT"}},
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Maximale Anzahl an PICLas-Retries erreicht"):
+                    sim._wait_for_jobs_and_retry_failed_outputs(
+                        [retry_dir],
+                        ["job-1"],
+                        max_retries=0,
+                    )
+
+            self.assertEqual(
+                "cn0420\n",
                 pathlib.Path(td, "bad_nodes.txt").read_text(encoding="utf-8"),
             )
 

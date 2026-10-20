@@ -13,6 +13,33 @@ from mfmc_campaign.types import RegimeDescriptor
 
 
 class TestSamplingAndEstimator(unittest.TestCase):
+    def test_latin_hypercube_stratifies_each_uniform_gsi_axis(self):
+        variables = [
+            {
+                "name": "cll_alpha_n",
+                "source_block": "gsi.cll",
+                "distribution": {"kind": "uniform", "params": {"low": 0.0, "high": 1.0}},
+                "baseline": 0.5,
+                "bounds": [0.0, 1.0],
+            },
+            {
+                "name": "cll_sigma_t",
+                "source_block": "gsi.cll",
+                "distribution": {"kind": "uniform", "params": {"low": 0.0, "high": 1.0}},
+                "baseline": 0.5,
+                "bounds": [0.0, 1.0],
+            },
+        ]
+        model = InputModel(variables, {"method": "latin_hypercube"})
+        rows = model.sample(
+            20,
+            SamplingContext(regime_id="fixed", active_source_blocks=["gsi.cll"]),
+            np.random.default_rng(20261020),
+        )
+        for name in ("cll_alpha_n", "cll_sigma_t"):
+            strata = sorted(int(float(row[name]) * 20) for row in rows)
+            self.assertEqual(list(range(20)), strata)
+
     def test_source_freeze_behavior(self):
         variables = [
             {

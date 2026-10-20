@@ -886,6 +886,8 @@ def _build_environment_payload(
         "adbsat_aos_offset_deg",
         "adbsat_aos_offset",
         "energy_accommodation",
+        "cll_alpha_n",
+        "cll_sigma_t",
         "alpha",
         "alphaN",
         "sigmaN",
@@ -919,6 +921,8 @@ def _build_environment_payload(
         "atmosphere_row",
         "trajectory_index",
         "piclas_object_boundary_name",
+        "piclas_surface_model",
+        "piclas_surface_model_scattering",
     ]:
         if key in metadata:
             payload[key] = metadata[key]

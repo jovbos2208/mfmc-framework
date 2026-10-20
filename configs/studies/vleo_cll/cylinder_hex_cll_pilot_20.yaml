@@ -1,0 +1,147 @@
+study:
+  id: vleo_cylinder_hex_cll_gsi_pilot_20
+  mode: mixed_uncertainty
+  active_source_blocks: [gsi.cll]
+
+sources:
+  blocks:
+    - {name: gsi.cll}
+
+geometries:
+  - id: SpecPractOpt_cylinder_hex
+    name: SpecPractOpt cylinder hex baseline
+    characteristic_length: 0.35902899
+    geometry_class: cylinder_hex
+    metadata:
+      hf_mesh: SpecPractOpt_cylinder_hex_mesh.h5
+      lf_model: SpecPractOpt_cylinder_hex
+      piclas_object_boundary_name: OBJ
+      reference_area_m2: 0.2054622883746301
+      reference_area_source: piclas_h5_OBJ_half_total_surface
+
+regimes:
+  - id: AO_1E15_FIXED_AXIAL
+    label: Fixed pure atomic oxygen reference state; AoS=0 deg; AoA=0 deg
+    descriptors:
+      altitude_km: 313.0
+      characteristic_length: 0.35902899
+      knudsen_number: 3784.57
+      speed_ratio: 7.72286
+      freestream_temperature: 961.0
+      composition_descriptor: O=1.0,N2=0.0,O2=0.0,He=0.0
+      solar_activity_state: fixed
+      geomagnetic_activity_state: fixed
+      wind_state: zero
+      geometry_class: cylinder_hex
+      surface_state: generic_effective
+      density_kg_m3: 2.65669645265334e-11
+      number_density_m3: 1.0e+15
+      relative_speed_mps: 7718.371
+      aos_deg: 0.0
+      aoa_deg: 0.0
+
+variables:
+  - name: cll_alpha_n
+    source_block: gsi.cll
+    distribution: {kind: uniform, params: {low: 0.0, high: 1.0}}
+    baseline: 0.5
+    bounds: [0.0, 1.0]
+  - name: cll_sigma_t
+    source_block: gsi.cll
+    distribution: {kind: uniform, params: {low: 0.0, high: 1.0}}
+    baseline: 0.5
+    bounds: [0.0, 1.0]
+
+sampling:
+  method: latin_hypercube
+  sample_count: 20
+  max_production_samples: 20
+
+models:
+  hf:
+    id: PICLas_TPMC_CLL
+    kind: legacy_piclas
+    kwargs:
+      simulator_module: PICLas
+      # scripts/configure_piclas.sh installs the private CLL binaries here;
+      # source code remains outside the Framework repository.
+      piclas_dir: piclas
+      update_dir: update_parameter_file
+      update_script: python update_parameter.py
+      mpi_procs: 128
+      piclas_mode: tpmc
+      collision_mode: 0
+      calc_quality_factors: false
+      submission_group_size: 2
+      payload_defaults:
+        piclas_surface_model: 0
+        piclas_surface_model_scattering: 1
+        wall_temperature_k: 300.0
+        t_end_s: 1.0e-4
+        manual_timestep_s: 1.0e-7
+        sampling_iterations: 250
+  lf:
+    - id: ADBSat_CLL
+      kind: legacy_adbsat
+      method: CLL
+      kwargs:
+        simulator_module: ADBSat
+        base_dir: ADBSat-PyVersion
+  available_qois:
+    PICLas_TPMC_CLL: [C_D, C_D2]
+    ADBSat_CLL: [C_D, C_D2]
+
+qois:
+  direct: [C_D, C_D2]
+  derived:
+    - {name: Var_C_D, expression: "E[C_D2]-E[C_D]^2"}
+  batch_cd_cd2: true
+  single_allocation_all_qois: true
+
+pilot:
+  size: 20
+  sizes: [20]
+  robustness_repetitions: 2000
+  reuse_across_budgets: false
+
+budget:
+  total: [1.0]
+  min_hf: 1
+  hf_fraction: 0.0
+
+repetitions: 1
+seeds: {global: 20261020}
+
+outputs:
+  dir: campaign_outputs/vleo_cll/cylinder_hex_pilot_20
+  write_parquet: false
+  write_model_evaluations: true
+  write_config_snapshot: true
+  plots: true
+
+execution:
+  backend: legacy_slurm
+  resume: false
+  aos_deg: 0.0
+  aoa_deg: 0.0
+  flow_zero_direction: [1.0, 0.0, 0.0]
+  adbsat_aos_offset_deg: 0.0
+  environment:
+    model: csv
+    atmosphere_row:
+      - 2.65669645265334e-11
+      - 0.0
+      - 0.0
+      - 1.0e+15
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 961.0
+    relative_speed_mps: 7718.371
+    wind_enu_mps: [0.0, 0.0, 0.0]
+    use_winds: false
+    apply_wind_to_speed: false
+

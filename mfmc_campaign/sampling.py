@@ -363,9 +363,54 @@ class InputModel:
         method = self.sampling.get("method", "independent")
         if method == "blockwise_joint":
             rows = self._sample_blockwise_joint(n, context, rng)
+        elif method in {"latin_hypercube", "lhs"}:
+            rows = self._sample_latin_hypercube(n, context, rng)
         else:
             rows = self._sample_independent(n, context, rng)
         return self._apply_trajectory(rows, rng)
+
+    def _sample_latin_hypercube(
+        self,
+        n: int,
+        context: SamplingContext,
+        rng: np.random.Generator,
+    ) -> List[Dict[str, Any]]:
+        """Randomized LHS for bounded uniform variables; fixed variables remain fixed."""
+        if n < 1:
+            raise ValueError("Latin-hypercube sample size must be positive")
+        rows = [dict() for _ in range(n)]
+        active = set(context.active_source_blocks)
+        for var in self.variables:
+            name = str(var["name"])
+            source = str(var["source_block"])
+            transform = var.get("transform")
+            bounds = var.get("bounds")
+            if source not in active:
+                values = np.full(n, self._resolve_baseline(var, context.regime_id))
+            else:
+                distribution = self._resolve_distribution(var, context.regime_id)
+                kind = str(distribution.get("kind", "fixed"))
+                params = distribution.get("params", {})
+                if kind == "fixed":
+                    values = np.full(n, params.get("value"))
+                elif kind == "uniform":
+                    low = float(params["low"])
+                    high = float(params["high"])
+                    if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+                        raise ValueError(f"Invalid uniform bounds for LHS variable '{name}'")
+                    unit = (rng.permutation(n) + rng.random(n)) / n
+                    values = low + (high - low) * unit
+                else:
+                    raise ValueError(
+                        f"Latin-hypercube sampling supports only fixed/uniform variables; "
+                        f"'{name}' uses '{kind}'"
+                    )
+            for index, raw_value in enumerate(values):
+                value = raw_value.item() if isinstance(raw_value, np.generic) else raw_value
+                if transform and isinstance(value, (int, float, np.integer, np.floating)):
+                    value = _apply_transform(float(value), str(transform))
+                rows[index][name] = _clip_bounds(value, bounds)
+        return rows
 
     def _trajectory_indices(self, n: int, rng: np.random.Generator) -> np.ndarray:
         count = len(self.trajectory_records)

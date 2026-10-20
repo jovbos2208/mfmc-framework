@@ -346,10 +346,21 @@ def _resolve_surface_parameters(payload):
     momentum_default = defaults.get("momentum_accommodation", defaults.get("MomentumACC", trans_acc * trans_acc))
     momentum_acc = _clip01(_payload_value(payload, ["momentum_accommodation"], momentum_default))
 
-    alpha_n = _clip01(_payload_value(payload, ["alphaN", "alpha_n"], trans_acc))
+    alpha_n = _clip01(
+        _payload_value(payload, ["cll_alpha_n", "alphaN", "alpha_n"], trans_acc)
+    )
 
     sigma_n = _clip01(_payload_value(payload, ["sigmaN", "sigma_n"], defaults.get("sigmaN", 0.9)))
-    sigma_t = _clip01(_payload_value(payload, ["sigmaT", "sigma_t"], defaults.get("sigmaT", 0.7)))
+    sigma_t_raw = float(
+        _payload_value(
+            payload,
+            ["cll_sigma_t", "sigmaT", "sigma_t"],
+            defaults.get("sigmaT", 0.7),
+        )
+    )
+    if not 0.0 <= sigma_t_raw <= 2.0:
+        raise ValueError("CLL sigma_t must be in [0, 2]")
+    sigma_t = sigma_t_raw
 
     return {
         "alpha": trans_acc,
@@ -773,7 +784,7 @@ def run_simulation(
             0.9,
             context,
         )
-    if _payload_has_key(payload, ["alphaN", "alpha_n", "energy_accommodation"]):
+    if _payload_has_key(payload, ["cll_alpha_n", "alphaN", "alpha_n", "energy_accommodation"]):
         _assert_panel_binding(
             "alphaN",
             inparam["alphaN"],
@@ -782,7 +793,7 @@ def run_simulation(
             0.9,
             context,
         )
-    if _payload_has_key(payload, ["sigmaT", "sigma_t"]):
+    if _payload_has_key(payload, ["cll_sigma_t", "sigmaT", "sigma_t"]):
         _assert_panel_binding(
             "sigmaT",
             inparam["sigmaT"],

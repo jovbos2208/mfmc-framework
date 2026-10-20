@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "status": "pilot_ready_production_sizes_pending",
+  "primary_endpoint": "gsi_standard_deviation_of_drag_area_m2",
+  "smallest_relevant_robustness_improvement": {
+    "metric": "candidate_std_drag_area_m2 / baseline_std_drag_area_m2",
+    "maximum_ratio": 0.8,
+    "minimum_relative_reduction": 0.2,
+    "basis": "design_SESOI_requires_domain_expert_confirmation"
+  },
+  "mean_performance_guardrail": {
+    "metric": "candidate_mean_drag_area_m2 / baseline_mean_drag_area_m2",
+    "maximum_ratio": 1.02,
+    "maximum_relative_degradation": 0.02,
+    "absolute_delta_m2": null,
+    "absolute_value_rule": "0.02 * pilot_baseline_mean_drag_area_m2"
+  },
+  "stages": [
+    {"id": "kernel_verification", "sample_count": 5, "status": "required_before_pilot"},
+    {"id": "paired_cost_variance_pilot", "sample_count": 20, "status": "configured"},
+    {"id": "geometry_search", "candidate_sample_counts": [20, 40, 80], "sample_count": null, "status": "awaiting_pilot"},
+    {"id": "confirmatory_holdout", "sample_count": null, "status": "awaiting_pilot_and_finalist_lock"},
+    {"id": "dsmc_model_form", "sample_count": null, "status": "awaiting_pilot_and_budget"},
+    {"id": "sentman_maxwell_comparison", "sample_count": null, "status": "post_geometry_lock_only"}
+  ],
+  "sample_set_contract": "search, holdout and DSMC IDs/seeds are mutually disjoint",
+  "technical_reserve_fraction": 0.15
+}
