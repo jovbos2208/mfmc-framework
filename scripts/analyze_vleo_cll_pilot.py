@@ -124,6 +124,9 @@ def main() -> None:
 
     cd = report["qoi"]["C_D"]
     ci = cd["rho_bootstrap"]
+    scale_ratio = max(cd["hf_mean"], cd["lf_mean"]) / max(
+        min(cd["hf_mean"], cd["lf_mean"]), 1.0e-300
+    )
     markdown = f"""# Phase-3 audit of the CLL baseline pilot
 
 Raw input: `{raw.name}`  
@@ -146,7 +149,7 @@ Bootstrap: {args.bootstrap_draws} paired resamples, seed {args.seed}
 | Equal-cost MFMC variance / plain-MC variance | {cd['equal_cost_relative_variance']:.4f} |
 | Equal-cost MFMC SE / plain-MC SE | {cd['equal_cost_relative_standard_error']:.4f} |
 
-The control variate is potentially useful because ADBSat is very cheap, but its correlation is only moderate and uncertain at `n=20`. The absolute `C_D` scale differs by nearly one order of magnitude; this does not invalidate a control variate mathematically, but it requires an orientation/reference-area and model-semantics audit before production.
+The control variate is potentially useful because ADBSat is very cheap, but its correlation is only moderate and uncertain at `n=20`. The two mean `C_D` values differ by a factor of {scale_ratio:.3g}; this does not invalidate a control variate mathematically, but it requires an orientation, realized-reference-area, and model-semantics audit before production.
 
 ## Gate G3 decision
 

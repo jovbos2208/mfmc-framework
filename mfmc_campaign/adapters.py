@@ -1467,7 +1467,9 @@ class LegacyADBSatAdapter(BaseModelAdapter):
             attach_piclas_reference_area=False,
         )
         payload["environment_model"] = env_model
-        payload.setdefault("write_input_audit", False)
+        # Input audits are small and are required to verify geometry, flow,
+        # CLL parameters, and the realized A_total/2 normalization.
+        payload.setdefault("write_input_audit", True)
         payload.setdefault("write_mat", False)
         if self.surface_mapping is not None:
             payload["write_panel_surface_field"] = True

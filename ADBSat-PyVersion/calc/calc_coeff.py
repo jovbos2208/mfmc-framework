@@ -176,8 +176,13 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
             ctau_area = ctau * areas        # (N,)
             cp_area   = cp   * areas
 
+            panel_tangential_traction_over_q = (tau_dir * ctau.reshape(1, -1)).T
+            panel_normal_traction_over_q = (-surfN * cp.reshape(1, -1)).T
+
             Cf_g = (tau_dir @ ctau_area - surfN @ cp_area) / area_ref  # (3,)
-            panel_traction_over_q = (tau_dir * ctau.reshape(1, -1) - surfN * cp.reshape(1, -1)).T
+            panel_traction_over_q = (
+                panel_tangential_traction_over_q + panel_normal_traction_over_q
+            )
             panel_force_per_area = float(dp) * panel_traction_over_q
             reconstructed_cf_g = np.sum(panel_traction_over_q * areas[:, None], axis=0) / area_ref
             if not np.allclose(reconstructed_cf_g, Cf_g, rtol=1.0e-12, atol=1.0e-14):
@@ -256,11 +261,14 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
                 "AreaProjTotal": float(area_proj_total),
                 "AreaRefSource": area_ref_source,
                 "panel_traction_over_q": panel_traction_over_q,
+                "panel_normal_traction_over_q": panel_normal_traction_over_q,
+                "panel_tangential_traction_over_q": panel_tangential_traction_over_q,
                 "panel_force_per_area": panel_force_per_area,
                 "panel_area": areas.copy(),
                 "panel_center": barC.T.copy(),
                 "panel_normal": surfN.T.copy(),
                 "u_hat_inf": v_dir.copy(),
+                "shadowed_panel_count": int(np.asarray(shad_pan).size) if flag_shad else 0,
                 "q_inf": float(dp),
             }
 

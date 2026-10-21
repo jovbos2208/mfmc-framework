@@ -125,6 +125,12 @@ def _write_panel_surface_field(coeffs, payload, result_dir, gsi_model, run_id):
         mesh_fingerprint=np.asarray([str(payload.get("surface_mesh_fingerprint", ""))]),
         panel_force_per_area=np.asarray(coeffs["panel_force_per_area"], dtype=float),
         panel_traction_over_q=np.asarray(coeffs["panel_traction_over_q"], dtype=float),
+        panel_normal_traction_over_q=np.asarray(
+            coeffs["panel_normal_traction_over_q"], dtype=float
+        ),
+        panel_tangential_traction_over_q=np.asarray(
+            coeffs["panel_tangential_traction_over_q"], dtype=float
+        ),
         panel_area=np.asarray(coeffs["panel_area"], dtype=float),
         panel_center=np.asarray(coeffs["panel_center"], dtype=float),
         panel_normal=np.asarray(coeffs["panel_normal"], dtype=float),
@@ -134,6 +140,7 @@ def _write_panel_surface_field(coeffs, payload, result_dir, gsi_model, run_id):
         C_D=np.asarray([float(coeffs["C_D"])]),
         C_L=np.asarray([float(coeffs["C_L"])]),
         C_Y=np.asarray([float(coeffs["C_Y"])]),
+        shadowed_panel_count=np.asarray([int(coeffs.get("shadowed_panel_count", 0))]),
     )
     return output_path
 
