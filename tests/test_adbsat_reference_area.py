@@ -14,7 +14,7 @@ from calc.calc_coeff import _reference_area
 def test_campaign_reference_area_overrides_attitude_dependent_projection() -> None:
     area, source = _reference_area(
         {"reference_area_m2": 0.0017, "reference_area_source": "explicit_payload"},
-        projected_area=0.0024,
+        half_total_area=0.0024,
     )
     assert area == 0.0017
     assert source == "explicit_payload"

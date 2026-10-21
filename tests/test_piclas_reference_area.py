@@ -6,6 +6,32 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class TestPiclasReferenceArea(unittest.TestCase):
+    def test_cylinder_hex_h5_reference_area_accepts_configured_boundary(self):
+        try:
+            import h5py  # noqa: F401
+        except Exception as exc:
+            self.skipTest(f"h5py unavailable: {exc}")
+
+        mesh_path = (
+            ROOT
+            / "PICLas"
+            / "geometry"
+            / "cylinder_hex_convergence"
+            / "L1"
+            / "cylinder_hex_scale_0p1_l1_mesh.h5"
+        )
+        if not mesh_path.exists():
+            self.skipTest("Cylinder-Hex HDF5 mesh is unavailable")
+
+        from mfmc_campaign.adapters import _piclas_h5_half_total_reference_area
+
+        area = _piclas_h5_half_total_reference_area(
+            str(mesh_path), object_boundary_name="CYLINDER_HEX"
+        )
+
+        self.assertIsNotNone(area)
+        self.assertGreater(float(area), 0.0)
+
     def test_cube_h5_reference_area_accepts_cube_boundary(self):
         try:
             import h5py  # noqa: F401

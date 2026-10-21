@@ -9,6 +9,10 @@ with `scripts/configure_piclas.sh`. Gate G5 must pass before production submit.
 
 - Primary robustness endpoint: GSI-induced standard deviation of
   `drag_area_m2 = C_D * reference_area_m2`.
+- Coefficient normalization: do not inject a configured projected area. PICLas
+  and ADBSat both use `reference_area_m2 = A_total / 2`, computed from the
+  surface used by the respective solver. The resulting dimensional drag area
+  remains `C_D * (A_total / 2)`.
 - Smallest relevant robustness improvement: 20% lower standard deviation than
   the baseline (`std_ratio <= 0.80`). This is a design SESOI, not a pilot estimate.
 - Mean-performance guardrail: no more than 2% larger mean drag area than the
@@ -31,6 +35,10 @@ run with the legacy `SpecPractOpt_cylinder_hex_mesh.h5` asset. Before execution,
 install the matching `cylinder_hex_scale_0p1.obj` and `.mat` files as
 `ADBSat-PyVersion/inou/obj_files/cylinder_hex_scale_0p1.obj` and
 `ADBSat-PyVersion/inou/models/cylinder_hex_scale_0p1.mat`, respectively.
+Before every campaign, verify that the PICLas object-boundary surface and the
+ADBSat panel surface have matching `A_total` within the documented mesh
+tolerance; otherwise equal normalization conventions would still produce
+different numerical reference areas.
 
 ## Execution order
 

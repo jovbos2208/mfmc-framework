@@ -16,8 +16,8 @@ geometries:
       hf_mesh: geometry/cylinder_hex_convergence/L1/cylinder_hex_scale_0p1_l1_mesh.h5
       lf_model: cylinder_hex_scale_0p1
       piclas_object_boundary_name: CYLINDER_HEX
-      reference_area_m2: 0.001513558965734707
-      reference_area_source: canonical_optimization_baseline_manifest
+      # Deliberately omit reference_area_m2: PICLas and ADBSat must each use
+      # their solver-side fallback A_ref = A_total / 2.
 
 regimes:
   - id: AO_1E15_FIXED_AXIAL

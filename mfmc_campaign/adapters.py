@@ -452,7 +452,10 @@ def _half_total_reference_area_from_hopr_boundary_vtu(vtu_path: str, obj_bc_ids:
     return float(max(0.5 * total_area, 1e-12))
 
 
-def _piclas_h5_half_total_reference_area(mesh_path: str) -> Optional[float]:
+def _piclas_h5_half_total_reference_area(
+    mesh_path: str,
+    object_boundary_name: Optional[str] = None,
+) -> Optional[float]:
     try:
         import h5py  # type: ignore
     except Exception:
@@ -494,6 +497,8 @@ def _piclas_h5_half_total_reference_area(mesh_path: str) -> Optional[float]:
     object_boundary_names = {"OBJ"}
     if mesh_boundary_name:
         object_boundary_names.add(mesh_boundary_name)
+    if object_boundary_name not in {None, ""}:
+        object_boundary_names.add(str(object_boundary_name).strip().upper())
     obj_bc_ids = [
         idx + 1
         for idx, name in enumerate(bc_names)
@@ -551,7 +556,10 @@ def _attach_piclas_reference_area(payload: Dict[str, Any]) -> None:
         return
     area = None
     if mesh_path.lower().endswith(".h5"):
-        area = _piclas_h5_half_total_reference_area(mesh_path)
+        area = _piclas_h5_half_total_reference_area(
+            mesh_path,
+            object_boundary_name=payload.get("piclas_object_boundary_name"),
+        )
         if area is None:
             raise RuntimeError(
                 f"Could not derive PICLas reference_area_m2 from HDF5 mesh '{mesh_path}'. "
