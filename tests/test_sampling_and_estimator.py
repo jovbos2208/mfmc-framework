@@ -40,6 +40,44 @@ class TestSamplingAndEstimator(unittest.TestCase):
             strata = sorted(int(float(row[name]) * 20) for row in rows)
             self.assertEqual(list(range(20)), strata)
 
+    def test_explicit_sampling_preserves_order_and_values(self):
+        variables = [
+            {
+                "name": "cll_alpha_n",
+                "source_block": "gsi.cll",
+                "distribution": {"kind": "uniform", "params": {"low": 0.0, "high": 1.0}},
+                "baseline": 0.5,
+                "bounds": [0.0, 1.0],
+            },
+            {
+                "name": "cll_sigma_t",
+                "source_block": "gsi.cll",
+                "distribution": {"kind": "uniform", "params": {"low": 0.0, "high": 1.0}},
+                "baseline": 0.5,
+                "bounds": [0.0, 1.0],
+            },
+        ]
+        expected = [
+            {"cll_alpha_n": 0.1, "cll_sigma_t": 0.9},
+            {"cll_alpha_n": 0.8, "cll_sigma_t": 0.2},
+        ]
+        model = InputModel(
+            variables,
+            {"method": "explicit", "explicit_samples": expected},
+        )
+        rows = model.sample(
+            2,
+            SamplingContext(regime_id="fixed", active_source_blocks=["gsi.cll"]),
+            np.random.default_rng(999),
+        )
+        self.assertEqual(expected, rows)
+        with self.assertRaisesRegex(ValueError, "count mismatch"):
+            model.sample(
+                1,
+                SamplingContext(regime_id="fixed", active_source_blocks=["gsi.cll"]),
+                np.random.default_rng(999),
+            )
+
     def test_source_freeze_behavior(self):
         variables = [
             {

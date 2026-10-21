@@ -1,0 +1,153 @@
+study:
+  id: vleo_cylinder_hex_nose_0p30_cll_transfer_20
+  mode: mixed_uncertainty
+  active_source_blocks: [gsi.cll]
+
+sources:
+  blocks:
+    - {name: gsi.cll}
+
+geometries:
+  - id: cylinder_hex_nose_0p30_scale_0p1
+    name: Fixed-volume Cylinder-Hex transfer geometry with nose fraction 0.30
+    characteristic_length: 0.1
+    geometry_class: parametric_cylinder_hex
+    metadata:
+      hf_mesh: ../outputs/vleo_geometry/cylinder_hex_nose_0p30_scale_0p1/cylinder_hex_nose_0p30_scale_0p1_mesh.h5
+      lf_model: cylinder_hex_nose_0p30_scale_0p1
+      piclas_object_boundary_name: CYLINDER_HEX
+
+regimes:
+  - id: AO_1E15_FIXED_AXIAL
+    label: Fixed pure atomic oxygen reference state; AoS=0 deg; AoA=0 deg
+    descriptors:
+      altitude_km: 313.0
+      characteristic_length: 0.1
+      knudsen_number: 13587.70
+      speed_ratio: 7.72286
+      freestream_temperature: 961.0
+      composition_descriptor: O=1.0,N2=0.0,O2=0.0,He=0.0
+      solar_activity_state: fixed
+      geomagnetic_activity_state: fixed
+      wind_state: zero
+      geometry_class: parametric_cylinder_hex
+      surface_state: generic_effective
+      density_kg_m3: 2.65669645265334e-11
+      number_density_m3: 1.0e+15
+      relative_speed_mps: 7718.371
+      aos_deg: 0.0
+      aoa_deg: 0.0
+
+variables:
+  - name: cll_alpha_n
+    source_block: gsi.cll
+    distribution: {kind: uniform, params: {low: 0.0, high: 1.0}}
+    baseline: 0.5
+    bounds: [0.0, 1.0]
+  - name: cll_sigma_t
+    source_block: gsi.cll
+    distribution: {kind: uniform, params: {low: 0.0, high: 1.0}}
+    baseline: 0.5
+    bounds: [0.0, 1.0]
+
+sampling:
+  method: explicit
+  sample_count: 20
+  max_production_samples: 20
+  source_contract: exact ordered copy of corrected baseline pilot SHA-256 e4ca9be942b23aaa77eb0a95953143f864029d3f65630b7f2df35a3541078355
+  explicit_samples:
+    - {cll_alpha_n: 0.020290308836683285, cll_sigma_t: 0.6969590405910484}
+    - {cll_alpha_n: 0.5219779933312544, cll_sigma_t: 0.9340977095634981}
+    - {cll_alpha_n: 0.7504497409631233, cll_sigma_t: 0.4412019592963978}
+    - {cll_alpha_n: 0.06154899383508615, cll_sigma_t: 0.7045122588087804}
+    - {cll_alpha_n: 0.9958689139570411, cll_sigma_t: 0.8305051404685019}
+    - {cll_alpha_n: 0.8035248124648987, cll_sigma_t: 0.39744357464881525}
+    - {cll_alpha_n: 0.6709649537508284, cll_sigma_t: 0.5876050992476952}
+    - {cll_alpha_n: 0.2389241130464117, cll_sigma_t: 0.601306244478766}
+    - {cll_alpha_n: 0.7088769198568685, cll_sigma_t: 0.5045741178192368}
+    - {cll_alpha_n: 0.6323908025211286, cll_sigma_t: 0.3326700889753963}
+    - {cll_alpha_n: 0.4527271131651755, cll_sigma_t: 0.4973497113171657}
+    - {cll_alpha_n: 0.12247763620816969, cll_sigma_t: 0.20848188833203585}
+    - {cll_alpha_n: 0.3922672884291871, cll_sigma_t: 0.1351262097512406}
+    - {cll_alpha_n: 0.57618400210729, cll_sigma_t: 0.7854196540142467}
+    - {cll_alpha_n: 0.8525208460270008, cll_sigma_t: 0.28989332772562965}
+    - {cll_alpha_n: 0.9182105488668159, cll_sigma_t: 0.08366065513694207}
+    - {cll_alpha_n: 0.2902101353122456, cll_sigma_t: 0.045941843943364494}
+    - {cll_alpha_n: 0.32117079769337176, cll_sigma_t: 0.9830483580432963}
+    - {cll_alpha_n: 0.17725482065563333, cll_sigma_t: 0.18318503177882595}
+    - {cll_alpha_n: 0.44246789986764135, cll_sigma_t: 0.8821559312170208}
+
+models:
+  hf:
+    id: PICLas_TPMC_CLL
+    kind: legacy_piclas
+    kwargs:
+      simulator_module: PICLas
+      piclas_dir: piclas
+      update_dir: update_parameter_file
+      update_script: python update_parameter.py
+      mpi_procs: 128
+      piclas_mode: tpmc
+      collision_mode: 0
+      calc_quality_factors: false
+      submission_group_size: 2
+      payload_defaults:
+        piclas_surface_model: 0
+        piclas_surface_model_scattering: 1
+        wall_temperature_k: 300.0
+        t_end_s: 1.0e-4
+        manual_timestep_s: 1.0e-7
+        sampling_iterations: 250
+  lf:
+    - id: ADBSat_CLL
+      kind: legacy_adbsat
+      method: CLL
+      kwargs:
+        simulator_module: ADBSat
+        base_dir: ADBSat-PyVersion
+  available_qois:
+    PICLas_TPMC_CLL: [C_D, C_D2]
+    ADBSat_CLL: [C_D, C_D2]
+
+qois:
+  direct: [C_D, C_D2]
+  derived:
+    - {name: Var_C_D, expression: "E[C_D2]-E[C_D]^2"}
+  batch_cd_cd2: true
+  single_allocation_all_qois: true
+
+pilot:
+  size: 20
+  sizes: [20]
+  robustness_repetitions: 2000
+  reuse_across_budgets: false
+
+budget:
+  total: [1.0]
+  min_hf: 1
+  hf_fraction: 0.0
+
+repetitions: 1
+seeds: {global: 20261020}
+
+outputs:
+  dir: campaign_outputs/vleo_cll/cylinder_hex_nose_0p30_transfer_20
+  write_parquet: false
+  write_model_evaluations: true
+  write_config_snapshot: true
+  plots: true
+
+execution:
+  backend: legacy_slurm
+  resume: false
+  aos_deg: 0.0
+  aoa_deg: 0.0
+  flow_zero_direction: [1.0, 0.0, 0.0]
+  adbsat_aos_offset_deg: 0.0
+  environment:
+    model: csv
+    atmosphere_row: [2.65669645265334e-11, 0.0, 0.0, 1.0e+15, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 961.0]
+    relative_speed_mps: 7718.371
+    wind_enu_mps: [0.0, 0.0, 0.0]
+    use_winds: false
+    apply_wind_to_speed: false

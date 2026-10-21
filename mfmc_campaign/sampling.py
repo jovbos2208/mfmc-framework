@@ -361,13 +361,43 @@ class InputModel:
 
     def sample(self, n: int, context: SamplingContext, rng: np.random.Generator) -> List[Dict[str, Any]]:
         method = self.sampling.get("method", "independent")
-        if method == "blockwise_joint":
+        if method == "explicit":
+            rows = self._sample_explicit(n, context)
+        elif method == "blockwise_joint":
             rows = self._sample_blockwise_joint(n, context, rng)
         elif method in {"latin_hypercube", "lhs"}:
             rows = self._sample_latin_hypercube(n, context, rng)
         else:
             rows = self._sample_independent(n, context, rng)
         return self._apply_trajectory(rows, rng)
+
+    def _sample_explicit(self, n: int, context: SamplingContext) -> List[Dict[str, Any]]:
+        configured = self.sampling.get("explicit_samples", self.sampling.get("samples"))
+        if not isinstance(configured, list) or not all(isinstance(row, dict) for row in configured):
+            raise ValueError("sampling.method='explicit' requires a list at sampling.explicit_samples")
+        if len(configured) != n:
+            raise ValueError(
+                f"Explicit sample count mismatch: requested {n}, configured {len(configured)}"
+            )
+        variable_names = {str(var["name"]) for var in self.variables}
+        rows: List[Dict[str, Any]] = []
+        for index, source_row in enumerate(configured):
+            unknown = sorted(set(source_row) - variable_names)
+            missing = sorted(variable_names - set(source_row))
+            if unknown or missing:
+                raise ValueError(
+                    f"Explicit sample {index} has unknown variables {unknown} and missing variables {missing}"
+                )
+            row: Dict[str, Any] = {}
+            for var in self.variables:
+                name = str(var["name"])
+                value = source_row[name]
+                transform = var.get("transform")
+                if transform and isinstance(value, (int, float, np.integer, np.floating)):
+                    value = _apply_transform(float(value), str(transform))
+                row[name] = _clip_bounds(value, var.get("bounds"))
+            rows.append(row)
+        return rows
 
     def _sample_latin_hypercube(
         self,

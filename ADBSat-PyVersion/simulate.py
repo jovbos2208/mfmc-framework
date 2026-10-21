@@ -131,6 +131,8 @@ def _write_panel_surface_field(coeffs, payload, result_dir, gsi_model, run_id):
         panel_tangential_traction_over_q=np.asarray(
             coeffs["panel_tangential_traction_over_q"], dtype=float
         ),
+        normal_C_D_signed=np.asarray([float(coeffs["normal_C_D_signed"])]),
+        tangential_C_D_signed=np.asarray([float(coeffs["tangential_C_D_signed"])]),
         panel_area=np.asarray(coeffs["panel_area"], dtype=float),
         panel_center=np.asarray(coeffs["panel_center"], dtype=float),
         panel_normal=np.asarray(coeffs["panel_normal"], dtype=float),
@@ -273,12 +275,15 @@ def _resolve_geometry_model(payload, adbsat_path, default_model="Cube"):
     sample = payload.get("sample", {})
     sample = sample if isinstance(sample, dict) else {}
     candidates = [
+        # The campaign geometry can carry a mesh-level HF identifier while
+        # explicitly naming the matching ADBSat surface asset via lf_model.
+        # Prefer that authoritative asset name over the HF geometry ID.
+        sample.get("lf_model"),
+        payload.get("lf_model"),
         sample.get("geometry_id"),
         payload.get("geometry_id"),
         sample.get("geometry_name"),
         payload.get("geometry_name"),
-        sample.get("lf_model"),
-        payload.get("lf_model"),
     ]
 
     for cand in candidates:

@@ -54,3 +54,20 @@ different numerical reference areas.
 No holdout or DSMC production config is intentionally activated yet: assigning
 their sample counts before the paired pilot would create an unjustified design.
 
+## Phase-3 follow-up runs
+
+The fixed-seed noise study uses three predeclared CLL anchors
+`(alpha_n,sigma_t)={(0.1,0.1),(0.5,0.5),(0.9,0.9)}` with five independent
+PICLas seeds per anchor. Submit and collect it with
+`scripts/run_piclas_adapter_workflow.py` and
+`configs/studies/vleo_cll/cylinder_hex_cll_piclas_seed_repeats.json`.
+
+The geometry-transfer pilot changes only `nose_length_fraction` from `0.20` to
+`0.30` while retaining length, volume, envelope limits, tail, chamfer, flow and
+the exact ordered 20-point baseline CLL sample. Its config is
+`cylinder_hex_nose_0p30_cll_transfer_20.yaml`. Before running on another host,
+copy its HDF5 mesh to the path referenced by the config and install its OBJ/MAT
+assets under the same stem in the ADBSat runtime directories. Analyze the two
+follow-ups with `analyze_vleo_cll_seed_repeats.py` and
+`analyze_vleo_cll_geometry_transfer.py`; neither run is a confirmatory holdout.
+

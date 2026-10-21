@@ -190,6 +190,10 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
             # wind‑, flow‑aligned and body coefficients
             Cf_w = L_gw.T @ Cf_g
             Cf_f = L_fb @ (L_gb.T @ Cf_g)
+            normal_cf_g = np.sum(panel_normal_traction_over_q * areas[:, None], axis=0) / area_ref
+            tangential_cf_g = np.sum(panel_tangential_traction_over_q * areas[:, None], axis=0) / area_ref
+            normal_cf_w = L_gw.T @ normal_cf_g
+            tangential_cf_w = L_gw.T @ tangential_cf_g
 
             # --- moment coefficients in *ground* axes --------------------------
             cross_barC_tau = np.cross(barC.T,  tau_dir.T).T
@@ -263,6 +267,8 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
                 "panel_traction_over_q": panel_traction_over_q,
                 "panel_normal_traction_over_q": panel_normal_traction_over_q,
                 "panel_tangential_traction_over_q": panel_tangential_traction_over_q,
+                "normal_C_D_signed": float(-normal_cf_w[0]),
+                "tangential_C_D_signed": float(-tangential_cf_w[0]),
                 "panel_force_per_area": panel_force_per_area,
                 "panel_area": areas.copy(),
                 "panel_center": barC.T.copy(),

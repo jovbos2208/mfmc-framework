@@ -37,6 +37,15 @@ def bootstrap_correlation(x: np.ndarray, y: np.ndarray, seed: int, draws: int) -
     return dict(zip(("q025", "q10", "q50", "q90", "q975"), map(float, quantiles)))
 
 
+def bootstrap_mean_difference(x: np.ndarray, y: np.ndarray, seed: int, draws: int) -> dict[str, float]:
+    rng = np.random.default_rng(seed)
+    difference = x - y
+    indices = rng.integers(0, len(difference), size=(draws, len(difference)))
+    values = difference[indices].mean(axis=1)
+    quantiles = np.quantile(values, [0.025, 0.5, 0.975])
+    return dict(zip(("q025", "q50", "q975"), map(float, quantiles)))
+
+
 def analyze_qoi(rows: list[dict[str, str]], qoi: str, seed: int, draws: int) -> dict[str, object]:
     selected = [row for row in rows if row["qoi"] == qoi]
     by_model: dict[str, dict[str, dict[str, str]]] = {}
@@ -53,6 +62,9 @@ def analyze_qoi(rows: list[dict[str, str]], qoi: str, seed: int, draws: int) -> 
     lf_cost = np.array([float(by_model[lf_name][sid]["cost"]) for sid in sample_ids])
     rho = float(np.corrcoef(hf, lf)[0, 1])
     beta = float(np.cov(hf, lf, ddof=1)[0, 1] / np.var(lf, ddof=1))
+    difference = hf - lf
+    regression_intercept = float(hf.mean() - beta * lf.mean())
+    regression_residual = hf - (regression_intercept + beta * lf)
     cost_ratio = float(hf_cost.mean() / lf_cost.mean())
     allocation_ratio = math.sqrt(max(0.0, rho * rho / (1.0 - rho * rho) * cost_ratio))
     # Equal-cost MFMC allocation against an all-HF estimator with n baseline samples.
@@ -74,7 +86,15 @@ def analyze_qoi(rows: list[dict[str, str]], qoi: str, seed: int, draws: int) -> 
         "lf_max": float(lf.max()),
         "pearson_rho": rho,
         "rho_bootstrap": bootstrap_correlation(hf, lf, seed, draws),
+        "paired_difference_hf_minus_lf_mean": float(difference.mean()),
+        "paired_difference_hf_minus_lf_sd": float(difference.std(ddof=1)),
+        "paired_difference_mean_bootstrap": bootstrap_mean_difference(hf, lf, seed + 1000, draws),
+        "paired_mae": float(np.abs(difference).mean()),
+        "paired_rmse": float(np.sqrt(np.mean(difference * difference))),
+        "relative_mean_bias_percent": float(100.0 * difference.mean() / hf.mean()),
         "control_variate_beta": beta,
+        "regression_intercept": regression_intercept,
+        "regression_residual_sd": float(regression_residual.std(ddof=2)),
         "residual_variance_fraction": 1.0 - rho * rho,
         "hf_mean_cost_cpu_h": float(hf_cost.mean()),
         "lf_mean_cost_cpu_h": float(lf_cost.mean()),
@@ -124,6 +144,7 @@ def main() -> None:
 
     cd = report["qoi"]["C_D"]
     ci = cd["rho_bootstrap"]
+    difference_ci = cd["paired_difference_mean_bootstrap"]
     scale_ratio = max(cd["hf_mean"], cd["lf_mean"]) / max(
         min(cd["hf_mean"], cd["lf_mean"]), 1.0e-300
     )
@@ -142,6 +163,13 @@ Bootstrap: {args.bootstrap_draws} paired resamples, seed {args.seed}
 | ADBSat mean ± SD | {cd['lf_mean']:.6g} ± {cd['lf_sd']:.6g} |
 | Pearson correlation | {cd['pearson_rho']:.4f} |
 | Paired-bootstrap 95% interval for correlation | [{ci['q025']:.4f}, {ci['q975']:.4f}] |
+| Mean paired difference, PICLas − ADBSat | {cd['paired_difference_hf_minus_lf_mean']:.6g} |
+| Paired-difference SD | {cd['paired_difference_hf_minus_lf_sd']:.6g} |
+| Bootstrap 95% interval for mean difference | [{difference_ci['q025']:.6g}, {difference_ci['q975']:.6g}] |
+| Paired MAE / RMSE | {cd['paired_mae']:.6g} / {cd['paired_rmse']:.6g} |
+| Relative mean bias | {cd['relative_mean_bias_percent']:.3f}% |
+| HF-on-LF regression intercept / slope | {cd['regression_intercept']:.6g} / {cd['control_variate_beta']:.6g} |
+| Regression residual SD | {cd['regression_residual_sd']:.6g} |
 | Mean PICLas cost | {cd['hf_mean_cost_cpu_h']:.6g} CPU-h |
 | Mean ADBSat cost | {cd['lf_mean_cost_cpu_h']:.6g} CPU-h |
 | PICLas/ADBSat cost ratio | {cd['hf_to_lf_cost_ratio']:.1f} |
@@ -149,7 +177,7 @@ Bootstrap: {args.bootstrap_draws} paired resamples, seed {args.seed}
 | Equal-cost MFMC variance / plain-MC variance | {cd['equal_cost_relative_variance']:.4f} |
 | Equal-cost MFMC SE / plain-MC SE | {cd['equal_cost_relative_standard_error']:.4f} |
 
-The control variate is potentially useful because ADBSat is very cheap, but its correlation is only moderate and uncertain at `n=20`. The two mean `C_D` values differ by a factor of {scale_ratio:.3g}; this does not invalidate a control variate mathematically, but it requires an orientation, realized-reference-area, and model-semantics audit before production.
+The corrected baseline geometry exhibits exceptionally high paired correlation at the sampled CLL points. ADBSat is also very cheap and its mean response closely matches PICLas (mean ratio {scale_ratio:.3g}). This is strong evidence for retaining it as a provisional control variate on this geometry, but it is not yet evidence that the correlation transfers to perturbed geometries. The continuous MFMC allocation is an asymptotic cost-model result rather than a production recommendation; it must be bounded by the finite two-dimensional input domain, implementation overhead, and geometry-transfer tests.
 
 ## Gate G3 decision
 
