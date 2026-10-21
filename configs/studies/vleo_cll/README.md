@@ -23,6 +23,15 @@ The 20-point pilot is ready to validate and dry-run. It pairs PICLas-TPMC-CLL
 with ADBSat-CLL and measures both correlation and cost. It is exploratory and
 must never be reused as a confirmatory holdout.
 
+The pilot uses the scaled parametric Cylinder-Hex optimization baseline shown
+schematically in Figure 1 of the manuscript: `L=0.1 m`, the converged L1 PICLas
+mesh `geometry/cylinder_hex_convergence/L1/cylinder_hex_scale_0p1_l1_mesh.h5`,
+and the matching ADBSat surface model `cylinder_hex_scale_0p1`. It must not be
+run with the legacy `SpecPractOpt_cylinder_hex_mesh.h5` asset. Before execution,
+install the matching `cylinder_hex_scale_0p1.obj` and `.mat` files as
+`ADBSat-PyVersion/inou/obj_files/cylinder_hex_scale_0p1.obj` and
+`ADBSat-PyVersion/inou/models/cylinder_hex_scale_0p1.mat`, respectively.
+
 ## Execution order
 
 1. Validate: `python3 -m mfmc_campaign.cli validate-config configs/studies/vleo_cll/cylinder_hex_cll_pilot_20.yaml`

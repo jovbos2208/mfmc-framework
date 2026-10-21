@@ -8,31 +8,31 @@ sources:
     - {name: gsi.cll}
 
 geometries:
-  - id: SpecPractOpt_cylinder_hex
-    name: SpecPractOpt cylinder hex baseline
-    characteristic_length: 0.35902899
-    geometry_class: cylinder_hex
+  - id: cylinder_hex_scale_0p1_l1
+    name: Scaled parametric Cylinder-Hex optimization baseline (L1 mesh)
+    characteristic_length: 0.1
+    geometry_class: parametric_cylinder_hex
     metadata:
-      hf_mesh: SpecPractOpt_cylinder_hex_mesh.h5
-      lf_model: SpecPractOpt_cylinder_hex
-      piclas_object_boundary_name: OBJ
-      reference_area_m2: 0.2054622883746301
-      reference_area_source: piclas_h5_OBJ_half_total_surface
+      hf_mesh: geometry/cylinder_hex_convergence/L1/cylinder_hex_scale_0p1_l1_mesh.h5
+      lf_model: cylinder_hex_scale_0p1
+      piclas_object_boundary_name: CYLINDER_HEX
+      reference_area_m2: 0.001513558965734707
+      reference_area_source: canonical_optimization_baseline_manifest
 
 regimes:
   - id: AO_1E15_FIXED_AXIAL
     label: Fixed pure atomic oxygen reference state; AoS=0 deg; AoA=0 deg
     descriptors:
       altitude_km: 313.0
-      characteristic_length: 0.35902899
-      knudsen_number: 3784.57
+      characteristic_length: 0.1
+      knudsen_number: 13587.70
       speed_ratio: 7.72286
       freestream_temperature: 961.0
       composition_descriptor: O=1.0,N2=0.0,O2=0.0,He=0.0
       solar_activity_state: fixed
       geomagnetic_activity_state: fixed
       wind_state: zero
-      geometry_class: cylinder_hex
+      geometry_class: parametric_cylinder_hex
       surface_state: generic_effective
       density_kg_m3: 2.65669645265334e-11
       number_density_m3: 1.0e+15

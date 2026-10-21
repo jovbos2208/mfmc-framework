@@ -16,15 +16,32 @@ def read_data(path: Path) -> list[dict[str, float]]:
     fields = {"angle_deg", "C_D", "C_L", "Var_C_D", "Var_C_L"}
     with path.open(newline="") as handle:
         reader = csv.DictReader(handle)
-        missing = fields - set(reader.fieldnames or ())
-        if missing:
-            raise ValueError(f"missing columns: {', '.join(sorted(missing))}")
-        rows = [{field: float(row[field]) for field in fields} for row in reader]
+        columns = set(reader.fieldnames or ())
+        if fields <= columns:
+            rows = [{field: float(row[field]) for field in fields} for row in reader]
+        elif {"regime_aos_deg", "qoi", "mfmc_estimate"} <= columns:
+            by_angle: dict[float, dict[str, float]] = {}
+            for row in reader:
+                if row["qoi"] not in fields - {"angle_deg"}:
+                    continue
+                angle = float(row["regime_aos_deg"])
+                by_angle.setdefault(angle, {"angle_deg": angle})[row["qoi"]] = float(row["mfmc_estimate"])
+            rows = list(by_angle.values())
+            incomplete = [row["angle_deg"] for row in rows if not fields <= set(row)]
+            if incomplete:
+                raise ValueError(f"incomplete QoIs at angles: {incomplete}")
+        else:
+            missing = fields - columns
+            raise ValueError(f"unsupported CSV schema; missing columns: {', '.join(sorted(missing))}")
     return sorted(rows, key=lambda row: row["angle_deg"])
 
 
-def plot(input_path: Path, output_prefix: Path) -> tuple[Path, Path]:
+def plot(input_path: Path, output_prefix: Path, exclude_angles: set[float] | None = None) -> tuple[Path, Path]:
     rows = read_data(input_path)
+    exclude_angles = exclude_angles or set()
+    rows = [row for row in rows if row["angle_deg"] not in exclude_angles]
+    if not rows:
+        raise ValueError("all angles were excluded")
     angle = [row["angle_deg"] for row in rows]
 
     mpl.rcParams.update({
@@ -84,9 +101,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
     parser.add_argument("--output-prefix", type=Path)
+    parser.add_argument("--exclude-angle", type=float, action="append", default=[])
     args = parser.parse_args()
     prefix = args.output_prefix or args.input.with_name(args.input.stem + "_cd_cl_std")
-    for path in plot(args.input, prefix):
+    for path in plot(args.input, prefix, set(args.exclude_angle)):
         print(path)
     return 0
 
