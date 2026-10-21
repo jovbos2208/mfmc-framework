@@ -47,9 +47,10 @@ def _find_regime(config: Dict[str, Any], regime_id: str) -> Dict[str, Any]:
 
 
 def _build_metadata(config: Dict[str, Any], geometry: Dict[str, Any], geometry_id: str) -> Dict[str, Any]:
+    execution = config.get("execution", {})
     meta = {
-        "aos_deg": config.get("execution", {}).get("aos_deg", 0.0),
-        "aoa_deg": config.get("execution", {}).get("aoa_deg", 0.0),
+        "aos_deg": execution.get("aos_deg", 0.0),
+        "aoa_deg": execution.get("aoa_deg", 0.0),
         "geometry_id": geometry.get("id", geometry.get("name", geometry_id)),
         "geometry_name": geometry.get("name", geometry.get("id", geometry_id)),
         "geometry_class": geometry.get("geometry_class"),
@@ -61,6 +62,16 @@ def _build_metadata(config: Dict[str, Any], geometry: Dict[str, Any], geometry_i
         meta.update(env_cfg)
         if "model" in env_cfg and "environment_model" not in meta:
             meta["environment_model"] = env_cfg.get("model")
+    for key in (
+        "flow_zero_direction",
+        "flow_zero_direction_xyz",
+        "zero_flow_direction",
+        "zero_flow_direction_xyz",
+        "adbsat_aos_offset_deg",
+        "adbsat_aos_offset",
+    ):
+        if key in execution:
+            meta[key] = execution[key]
     return meta
 
 
