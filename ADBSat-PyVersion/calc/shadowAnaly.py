@@ -1,69 +1,93 @@
+"""Panel shadow analysis ported from the original MATLAB ADBSat routine."""
+
 import numpy as np
+
 from .insidetri import insidetri
 
-def shadowAnaly(x, y, z, barC, delta, L_gw):
+
+def shadowAnaly(x, y, z, barC, delta, L_gw, surfN):
+    """Return zero-based indices of flow-facing panels shadowed by other panels.
+
+    This follows ``ADBSat/toolbox/calc/shadowAnaly.m`` directly. Candidate
+    triangles are projected into the wind-frame y-z plane, the projected
+    centroid is tested with the MATLAB barycentric point-in-triangle test,
+    and the final depth test uses the candidate panel normal.
     """
-    Checks for mesh elements shadowed from a direction by others.
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    z = np.asarray(z, dtype=float)
+    barC = np.asarray(barC, dtype=float)
+    delta = np.asarray(delta, dtype=float).reshape(-1)
+    L_gw = np.asarray(L_gw, dtype=float)
+    surfN = np.asarray(surfN, dtype=float)
 
-    Parameters:
-        x (np.ndarray): X coordinates of the vertices of the N faces (3xN).
-        y (np.ndarray): Y coordinates of the vertices of the N faces (3xN).
-        z (np.ndarray): Z coordinates of the vertices of the N faces (3xN).
-        barC (np.ndarray): Barycentre of each mesh element (3xN).
-        delta (np.ndarray): Angles between flow and surface normal for each mesh element (1xN).
-        L_gw (np.ndarray): Rotation matrix from wind to geometric coordinate frame.
+    pAw = L_gw.T @ np.vstack((x[0, :], y[0, :], z[0, :]))
+    pBw = L_gw.T @ np.vstack((x[1, :], y[1, :], z[1, :]))
+    pCw = L_gw.T @ np.vstack((x[2, :], y[2, :], z[2, :]))
+    barCw = L_gw.T @ barC
 
-    Returns:
-        np.ndarray: Indices of the panels that are shadowed.
-    """
-    pAw = np.dot(L_gw.T, np.array([x[0, :], y[0, :], z[0, :]]))
-    pBw = np.dot(L_gw.T, np.array([x[1, :], y[1, :], z[1, :]]))
-    pCw = np.dot(L_gw.T, np.array([x[2, :], y[2, :], z[2, :]]))
-    barCw = np.dot(L_gw.T, barC)
-
-    xW = np.vstack([pAw[0, :], pBw[0, :], pCw[0, :]])
+    xW = np.vstack((pAw[0, :], pBw[0, :], pCw[0, :]))
     xWmax = np.max(xW, axis=0)
     xWmin = np.min(xW, axis=0)
 
-    indB = np.where(delta * 180 / np.pi > 90.0001)[0]
-    indF = np.where(delta * 180 / np.pi <= 90.0001)[0]
+    delta_deg = np.degrees(delta)
+    indB = np.flatnonzero(delta_deg > 90.0001)
+    indF = np.flatnonzero(delta_deg <= 90.0001)
+    if indB.size == 0 or indF.size == 0:
+        return np.empty(0, dtype=int)
 
     minXwF = np.min(xWmin[indF])
     maxXwB = np.max(xWmin[indB])
 
-    indFPot = np.where(xWmin[indF] - maxXwB < 1e-5)[0]
-    indBPot = np.where(xWmax[indB] - minXwF > 1e-5)[0]
+    # Preserve the MATLAB expression ``10e-5`` (= 1e-4) exactly.
+    candidate_tol = 10e-5
+    indFPot = np.flatnonzero(xWmin[indF] - maxXwB < candidate_tol)
+    indBPot = np.flatnonzero(xWmax[indB] - minXwF > candidate_tol)
+    if indFPot.size == 0 or indBPot.size == 0:
+        return np.empty(0, dtype=int)
 
-    yWC = np.vstack([pAw[1, indB[indBPot]], pBw[1, indB[indBPot]], pCw[1, indB[indBPot]]])
-    zWC = np.vstack([pAw[2, indB[indBPot]], pBw[2, indB[indBPot]], pCw[2, indB[indBPot]]])
+    potential_back_panels = indB[indBPot]
+    yWC = np.vstack((pAw[1, potential_back_panels],
+                     pBw[1, potential_back_panels],
+                     pCw[1, potential_back_panels]))
+    zWC = np.vstack((pAw[2, potential_back_panels],
+                     pBw[2, potential_back_panels],
+                     pCw[2, potential_back_panels]))
 
-    shadPan = np.zeros(len(barCw[0]), dtype=int)
-    tolB = 1e-5
+    shadowed = np.zeros(barCw.shape[1], dtype=bool)
+    depth_tol = 1e-5
 
-    for i in indFPot:
-        transYcord = yWC - barCw[1, indF[i]]
+    for front_position in indFPot:
+        front_panel = indF[front_position]
+        transYcord = yWC - barCw[1, front_panel]
         yCoord = np.abs(np.sum(np.sign(transYcord), axis=0))
-        yC_chang = np.where(yCoord < 3)[0]
-
-        if len(yC_chang) == 0:
+        yC_chang = np.flatnonzero(yCoord < 3)
+        if yC_chang.size == 0:
             continue
 
-        transZcord = zWC[:, yC_chang] - barCw[2, indF[i]]
+        transZcord = zWC[:, yC_chang] - barCw[2, front_panel]
         zCoord = np.abs(np.sum(np.sign(transZcord), axis=0))
-        zC_chang = np.where(zCoord < 3)[0]
-
-        if len(zC_chang) == 0:
+        zC_chang = np.flatnonzero(zCoord < 3)
+        if zC_chang.size == 0:
             continue
 
-        for idx in zC_chang:
-            p1 = np.array([transYcord[0, idx], transZcord[0, idx]])
-            p2 = np.array([transYcord[1, idx], transZcord[1, idx]])
-            p3 = np.array([transYcord[2, idx], transZcord[2, idx]])
-            points = np.zeros((2, len(zC_chang)))
+        # zC_chang indexes the y-filtered subset; map it back before taking
+        # y coordinates or resolving global panel indices.
+        projected_candidates = yC_chang[zC_chang]
+        p1 = np.vstack((transYcord[0, projected_candidates], transZcord[0, zC_chang]))
+        p2 = np.vstack((transYcord[1, projected_candidates], transZcord[1, zC_chang]))
+        p3 = np.vstack((transYcord[2, projected_candidates], transZcord[2, zC_chang]))
 
-            inside = insidetri(p1.reshape(2, -1), p2.reshape(2, -1), p3.reshape(2, -1), points)
-            if inside.size > 0:
-                if np.any((barCw[0, indB[indBPot[yC_chang[idx]]]] - barCw[0, indF[i]]) > tolB):
-                    shadPan[indF[i]] = 1
+        inside_positions = insidetri(p1, p2, p3, np.zeros((2, zC_chang.size)))
+        if inside_positions.size == 0:
+            continue
 
-    return np.where(shadPan > 0)[0]
+        occluder_positions = projected_candidates[inside_positions]
+        occluder_panels = potential_back_panels[occluder_positions]
+        normals_w = L_gw.T @ surfN[:, occluder_panels]
+        centroid_to_vertex = barCw[:, front_panel, None] - pAw[:, occluder_panels]
+        depth = np.sum(normals_w * centroid_to_vertex, axis=0)
+        if np.any(depth > depth_tol):
+            shadowed[front_panel] = True
+
+    return np.flatnonzero(shadowed)

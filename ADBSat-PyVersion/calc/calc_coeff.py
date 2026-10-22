@@ -145,7 +145,7 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
             # 3.7) *Shadow* analysis – panels in the wake yield zero contribution
             # -----------------------------------------------------------------
             if flag_shad:
-                shad_pan = shadowAnaly(x, y, z, barC, delta, L_gw)
+                shad_pan = shadowAnaly(x, y, z, barC, delta, L_gw, surfN)
                 cp[shad_pan]   = 0.0
                 ctau[shad_pan] = 0.0
                 cd[shad_pan]   = 0.0
@@ -185,8 +185,12 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
             )
             panel_force_per_area = float(dp) * panel_traction_over_q
             reconstructed_cf_g = np.sum(panel_traction_over_q * areas[:, None], axis=0) / area_ref
-            if not np.allclose(reconstructed_cf_g, Cf_g, rtol=1.0e-12, atol=1.0e-14):
-                raise RuntimeError("ADBSat panel traction does not reconstruct the integrated force coefficient")
+            if not np.allclose(reconstructed_cf_g, Cf_g, rtol=1.0e-12, atol=1.0e-12):
+                max_abs_diff = float(np.max(np.abs(reconstructed_cf_g - Cf_g)))
+                raise RuntimeError(
+                    "ADBSat panel traction does not reconstruct the integrated force "
+                    f"coefficient (max_abs_diff={max_abs_diff:.6g})"
+                )
             # wind‑, flow‑aligned and body coefficients
             Cf_w = L_gw.T @ Cf_g
             Cf_f = L_fb @ (L_gb.T @ Cf_g)

@@ -28,9 +28,14 @@ def surface_normals(x, y, z):
     V2 = np.array([xV2, yV2, zV2])
 
     # Calculate barycenters
-    bariC = (np.array([x[0, :] + x[1, :] + x[2, :], 
-                       y[0, :] + y[1, :] + y[2, :], 
-                       z[0, :] + z[1, :] + z[2, :]]) / 3)
+    # Preserve the operation order of MATLAB ``1/3 .* sum(vertices)``.
+    # The last-bit difference versus dividing by 3 can change an exact-edge
+    # decision in the shadow projection at cardinal flow angles.
+    bariC = (1.0 / 3.0) * np.array([
+        x[0, :] + x[1, :] + x[2, :],
+        y[0, :] + y[1, :] + y[2, :],
+        z[0, :] + z[1, :] + z[2, :],
+    ])
 
     # Calculate surface normals
     surfN = np.cross(V1.T, V2.T).T

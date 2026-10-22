@@ -1,40 +1,35 @@
+"""Barycentric point-in-triangle test matching MATLAB ADBSat."""
+
 import numpy as np
 
-def insidetri(p1, p2, p3, points):
-    """
-    Prüft, ob Punkte innerhalb mehrerer Dreiecke liegen.
 
-    Parameters:
-        p1 (np.ndarray): Array mit den ersten Eckpunkten der Dreiecke, Form (2, N).
-        p2 (np.ndarray): Array mit den zweiten Eckpunkten der Dreiecke, Form (2, N).
-        p3 (np.ndarray): Array mit den dritten Eckpunkten der Dreiecke, Form (2, N).
-        points (np.ndarray): Array der zu prüfenden Punkte, Form (2, M).
+def insidetri(A, B, C, p):
+    """Return indices whose paired point lies inside its paired triangle."""
+    A = np.asarray(A, dtype=float)
+    B = np.asarray(B, dtype=float)
+    C = np.asarray(C, dtype=float)
+    p = np.asarray(p, dtype=float)
+    if not (A.shape == B.shape == C.shape == p.shape):
+        raise ValueError("A, B, C and p must have identical 2-by-N shapes")
+    if A.ndim != 2 or A.shape[0] != 2:
+        raise ValueError("A, B, C and p must be 2-by-N arrays")
 
-    Returns:
-        np.ndarray: Boolean-Array mit True, wenn ein Punkt innerhalb eines Dreiecks liegt, Form (N, M).
-    """
-    def sign(p1, p2, p3):
-        return (p1[0, :] - p3[0, :]) * (p2[1, :] - p3[1, :]) - (p2[0, :] - p3[0, :]) * (p1[1, :] - p3[1, :])
+    v0 = C - A
+    v1 = B - A
+    v2 = p - A
+    dot00 = np.sum(v0 * v0, axis=0)
+    dot01 = np.sum(v0 * v1, axis=0)
+    dot02 = np.sum(v0 * v2, axis=0)
+    dot11 = np.sum(v1 * v1, axis=0)
+    dot12 = np.sum(v1 * v2, axis=0)
 
-    # Anzahl der Dreiecke und Punkte
-    num_triangles = p1.shape[1]
-    num_points = points.shape[1]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        inv_denom = 1.0 / (dot00 * dot11 - dot01 * dot01)
+        u = (dot11 * dot02 - dot01 * dot12) * inv_denom
+        v = (dot00 * dot12 - dot01 * dot02) * inv_denom
 
-    # Wiederhole Punkte, damit sie mit den Dreiecken verglichen werden können
-    repeated_points = np.repeat(points[:, :, np.newaxis], num_triangles, axis=2)
-
-    # Wiederhole Dreiecke, damit sie mit den Punkten verglichen werden können
-    repeated_p1 = np.repeat(p1[:, :, np.newaxis], num_points, axis=2).transpose(0, 2, 1)
-    repeated_p2 = np.repeat(p2[:, :, np.newaxis], num_points, axis=2).transpose(0, 2, 1)
-    repeated_p3 = np.repeat(p3[:, :, np.newaxis], num_points, axis=2).transpose(0, 2, 1)
-
-    # Berechne die Vorzeichen für die Punkte relativ zu den Dreieckskanten
-    b1 = sign(repeated_points, repeated_p1, repeated_p2) < 0
-    b2 = sign(repeated_points, repeated_p2, repeated_p3) < 0
-    b3 = sign(repeated_points, repeated_p3, repeated_p1) < 0
-
-    # Prüfe, ob alle Vorzeichen übereinstimmen (Punkt liegt im Dreieck)
-    return np.logical_and.reduce([b1 == b2, b2 == b3], axis=0)
+    # Boundary handling is intentionally identical to MATLAB.
+    return np.flatnonzero((u >= 0.0) & (v >= 0.0) & ((u + v) < 1.0))
 
 
 

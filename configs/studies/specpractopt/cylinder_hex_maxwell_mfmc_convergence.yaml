@@ -15,7 +15,7 @@ geometries:
   geometry_class: cylinder
   metadata:
     hf_mesh: SpecPractOpt_cylinder_hex_mesh.h5
-    lf_model: SpecPractOpt_cylinder_hex
+    lf_model: SpecPractOpt
     reference_area_m2: 0.2054622883746301
     reference_area_source: piclas_h5_OBJ_half_total_surface
     piclas_object_boundary_name: OBJ
@@ -37,8 +37,8 @@ regimes:
     density_kg_m3: 2.65669645265334e-11
     number_density_m3: 1000000000000000.0
     relative_speed_mps: 7718.371
-    aos_deg: 45.0
-    aoa_deg: 0.0
+    aos_deg: 0.0
+    aoa_deg: 45.0
 variables:
 - name: momentum_accommodation
   source_block: gsi.momentum_accommodation
@@ -153,10 +153,10 @@ outputs:
 execution:
   backend: legacy_slurm
   resume: false
-  aos_deg: 45.0
-  aoa_deg: 0.0
+  aos_deg: 0.0
+  aoa_deg: 45.0
   flow_zero_direction:
-  - 1.0
+  - -1.0
   - 0.0
   - 0.0
   adbsat_aos_offset_deg: 0.0

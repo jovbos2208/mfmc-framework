@@ -7,11 +7,11 @@ study:
   - - gsi.momentum_accommodation
   attitude_grid:
     aos_deg:
+    - 0.0
+    aoa_deg:
       start: -90.0
       stop: 90.0
       step: 5.0
-    aoa_deg:
-    - 0.0
 sources:
   blocks:
   - name: gsi.momentum_accommodation
@@ -22,7 +22,7 @@ geometries:
   geometry_class: cylinder
   metadata:
     hf_mesh: SpecPractOpt_cylinder_hex_mesh.h5
-    lf_model: SpecPractOpt_cylinder_hex
+    lf_model: SpecPractOpt
     reference_area_m2: 0.2054622883746301
     reference_area_source: piclas_h5_OBJ_half_total_surface
     piclas_object_boundary_name: OBJ
@@ -172,7 +172,7 @@ execution:
   aos_deg: 0.0
   aoa_deg: 0.0
   flow_zero_direction:
-  - 1.0
+  - -1.0
   - 0.0
   - 0.0
   adbsat_aos_offset_deg: 0.0

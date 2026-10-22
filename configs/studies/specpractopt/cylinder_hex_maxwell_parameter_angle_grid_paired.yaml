@@ -1,0 +1,181 @@
+# Deterministic paired TPMC/ADBSat-Maxwell grid for SpecPractOpt.
+# Run with:
+#   python3 -m mfmc_campaign.cli run-pilots \
+#     configs/studies/specpractopt/cylinder_hex_maxwell_parameter_angle_grid_paired.yaml
+#
+# Grid: 7 AoS values x 6 momentum-accommodation values = 42 paired points.
+
+study:
+  id: specpractopt_cylinder_hex_tpmc_maxwell_parameter_angle_grid_paired
+  mode: baseline
+  active_source_blocks:
+  - gsi.momentum_accommodation
+  attitude_grid:
+    aos_deg: [0.0]
+    aoa_deg: [-90.0, -75.0, -60.0, -45.0, -30.0, -15.0, 0.0]
+  notes: Deterministic paired TPMC/ADBSat-Maxwell parameter-angle sweep.
+
+sources:
+  blocks:
+  - name: gsi.momentum_accommodation
+
+geometries:
+- id: SpecPractOpt_cylinder_hex
+  name: SpecPractOpt cylinder hex
+  characteristic_length: 0.35902899
+  geometry_class: cylinder
+  metadata:
+    hf_mesh: SpecPractOpt_cylinder_hex_mesh.h5
+    lf_model: SpecPractOpt
+    reference_area_m2: 0.2054622883746301
+    reference_area_source: piclas_h5_OBJ_half_total_surface
+    piclas_object_boundary_name: OBJ
+
+regimes:
+- id: AO_1E15_FIXED
+  label: Fixed pure atomic oxygen at 1e15 particles per cubic metre
+  descriptors:
+    altitude_km: 313.0
+    characteristic_length: 0.35902899
+    knudsen_number: 3784.57
+    speed_ratio: 7.72286
+    freestream_temperature: 961.0
+    composition_descriptor: O=1.0,N2=0.0,O2=0.0,He=0.0
+    solar_activity_state: fixed
+    geomagnetic_activity_state: fixed
+    wind_state: zero
+    geometry_class: cylinder
+    surface_state: maxwell_parameter_grid
+    density_kg_m3: 2.65669645265334e-11
+    number_density_m3: 1.0e15
+    relative_speed_mps: 7718.371
+    atmosphere_row:
+    - 2.65669645265334e-11
+    - 0.0
+    - 0.0
+    - 1.0e15
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 961.0
+
+variables:
+- name: momentum_accommodation
+  source_block: gsi.momentum_accommodation
+  distribution:
+    kind: uniform
+    params:
+      low: 0.0
+      high: 1.0
+  baseline: 0.5
+  bounds: [0.0, 1.0]
+
+sampling:
+  method: explicit
+  sample_count: 6
+  max_production_samples: 6
+  explicit_samples:
+  - {momentum_accommodation: 0.0}
+  - {momentum_accommodation: 0.2}
+  - {momentum_accommodation: 0.4}
+  - {momentum_accommodation: 0.6}
+  - {momentum_accommodation: 0.8}
+  - {momentum_accommodation: 1.0}
+
+models:
+  hf:
+    id: PICLas_TPMC
+    kind: legacy_piclas
+    kwargs:
+      simulator_module: PICLas
+      mpi_procs: 128
+      piclas_mode: tpmc
+      collision_mode: 0
+      calc_quality_factors: false
+      qoi_aliases:
+        C_L: C_Y
+        C_L2: C_Y2
+      payload_defaults:
+        t_end_s: 1.0e-4
+        manual_timestep_s: 1.0e-7
+        sampling_iterations: 250
+        piclas_object_boundary_index: 2
+        piclas_surface_model: 0
+        piclas_surface_model_scattering: 0
+  lf:
+  - id: Maxwell
+    kind: legacy_adbsat
+    method: PICLasMaxwell
+    kwargs:
+      simulator_module: ADBSat
+      base_dir: ADBSat-PyVersion
+      qoi_aliases:
+        C_L: C_Y
+        C_L2: C_Y2
+  available_qois:
+    PICLas_TPMC: [C_D, C_D2, C_L, C_L2]
+    Maxwell: [C_D, C_D2, C_L, C_L2]
+
+qois:
+  direct: [C_D, C_D2, C_L, C_L2]
+  derived:
+  - {name: Var_C_D, expression: "E[C_D2]-E[C_D]^2"}
+  - {name: Var_C_L, expression: "E[C_L2]-E[C_L]^2"}
+  batch_cd_cd2: false
+  single_allocation_all_qois: true
+
+# The explicit six-point grid is evaluated as paired pilot data. This avoids
+# treating the deterministic parameter grid as a random MFMC production draw.
+pilot:
+  size: 6
+  sizes: [6]
+  robustness_repetitions: 1
+  reuse_across_budgets: true
+
+# Required by the common schema; not used by the documented run-pilots command.
+budget:
+  total: [1.0]
+  min_hf: 1
+  hf_fraction: 0.0
+
+repetitions: 1
+seeds:
+  global: 20261022
+
+outputs:
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_maxwell_parameter_angle_grid
+  write_parquet: false
+  write_model_evaluations: true
+  write_config_snapshot: true
+  plots: false
+
+execution:
+  backend: legacy_slurm
+  resume: false
+  aos_deg: 0.0
+  aoa_deg: 0.0
+  flow_zero_direction: [-1.0, 0.0, 0.0]
+  adbsat_aos_offset_deg: 0.0
+  environment:
+    model: csv
+    atmosphere_row:
+    - 2.65669645265334e-11
+    - 0.0
+    - 0.0
+    - 1.0e15
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 961.0
+    relative_speed_mps: 7718.371
+    wind_enu_mps: [0.0, 0.0, 0.0]
+    use_winds: false
+    apply_wind_to_speed: false
+    trans_accommodation: 1.0
+    wall_temperature_k: 300.0
