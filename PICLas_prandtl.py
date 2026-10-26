@@ -458,7 +458,9 @@ class PiclasSimulator:
                  required_surface_state_files=None,
                  node_cores=36,
                  submission_group_size=10,
-                 submit_sleep_s=0.0):
+                 submit_sleep_s=0.0,
+                 max_concurrent_jobs=4,
+                 submission_poll_interval_s=10.0):
         self.update_script = update_script
         self.update_dir = os.path.abspath(update_dir)
         self.piclas_dir = os.path.abspath(piclas_dir)
@@ -485,6 +487,8 @@ class PiclasSimulator:
         self.node_cores = max(1, int(node_cores))
         self.submission_group_size = max(1, int(submission_group_size))
         self.submit_sleep_s = max(0.0, float(submit_sleep_s))
+        self.max_concurrent_jobs = max(1, int(max_concurrent_jobs))
+        self.submission_poll_interval_s = max(0.0, float(submission_poll_interval_s))
         self.geometry_mesh_map = {k: v for k, v in GEOMETRY_MESH_ALIASES.items()}
         if isinstance(geometry_mesh_map, dict):
             for k, v in geometry_mesh_map.items():
@@ -641,11 +645,13 @@ class PiclasSimulator:
         return job_subdir
 
     def create_simulation_job_script(self, job_subdir):
+        requested_tasks = max(1, int(self.mpi_procs))
         script_lines = [
             "#!/bin/bash",
             "#SBATCH --job-name=piclas_sim",
             "#SBATCH --nodes=1",
-            f"#SBATCH --ntasks-per-node={self.mpi_procs}",
+            f"#SBATCH --ntasks={requested_tasks}",
+            "#SBATCH --cpus-per-task=1",
             "#SBATCH --time=01:00:00",
             "#SBATCH --output=piclas_slurm-%j.out",
             "#SBATCH --error=piclas_slurm-%j.err",
@@ -655,10 +661,26 @@ class PiclasSimulator:
             "module load openmpi",
             "module load hdf5",
             "",
+            "export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}",
+            "export OPENBLAS_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}",
+            "",
             f"cd {job_subdir}",
             "",
             "start=$(date +%s%3N)",
-            f"mpirun -np {self.mpi_procs} ./piclas parameter.ini DSMC1.ini",
+            f"NTASKS=${{SLURM_NTASKS:-{requested_tasks}}}",
+            "unset SLURM_MPI_TYPE",
+            "MPI_LIST=$(srun --mpi=list 2>/dev/null || true)",
+            "if echo \"$MPI_LIST\" | grep -Eq '(^|[^[:alnum:]_])pmix([^[:alnum:]_]|$)'; then",
+            "  SRUN_MPI_OPT=--mpi=pmix",
+            "elif echo \"$MPI_LIST\" | grep -Eq '(^|[^[:alnum:]_])pmix_v3([^[:alnum:]_]|$)'; then",
+            "  SRUN_MPI_OPT=--mpi=pmix_v3",
+            "elif echo \"$MPI_LIST\" | grep -Eq '(^|[^[:alnum:]_])pmi2([^[:alnum:]_]|$)'; then",
+            "  SRUN_MPI_OPT=--mpi=pmi2",
+            "else",
+            "  echo \"No supported srun MPI plugin found: ${MPI_LIST}\" >&2",
+            "  exit 70",
+            "fi",
+            "srun $SRUN_MPI_OPT --kill-on-bad-exit=1 -n \"$NTASKS\" ./piclas parameter.ini DSMC1.ini",
             "end=$(date +%s%3N)",
             "runtime=$((end - start))",
             "echo $runtime > cpu_time.txt"
@@ -686,7 +708,8 @@ class PiclasSimulator:
             "#!/bin/bash",
             "#SBATCH --job-name=piclas_group",
             "#SBATCH --nodes=1",
-            f"#SBATCH --ntasks-per-node={requested_tasks}",
+            f"#SBATCH --ntasks={requested_tasks}",
+            "#SBATCH --cpus-per-task=1",
             "#SBATCH --time=02:00:00",
             "#SBATCH --output=piclas_group-%j.out",
             "#SBATCH --error=piclas_group-%j.err",
@@ -696,12 +719,28 @@ class PiclasSimulator:
             "module load openmpi",
             "module load hdf5",
             "",
+            "export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}",
+            "export OPENBLAS_NUM_THREADS=${SLURM_CPUS_PER_TASK:-1}",
+            f"NTASKS=${{SLURM_NTASKS:-{requested_tasks}}}",
+            "unset SLURM_MPI_TYPE",
+            "MPI_LIST=$(srun --mpi=list 2>/dev/null || true)",
+            "if echo \"$MPI_LIST\" | grep -Eq '(^|[^[:alnum:]_])pmix([^[:alnum:]_]|$)'; then",
+            "  SRUN_MPI_OPT=--mpi=pmix",
+            "elif echo \"$MPI_LIST\" | grep -Eq '(^|[^[:alnum:]_])pmix_v3([^[:alnum:]_]|$)'; then",
+            "  SRUN_MPI_OPT=--mpi=pmix_v3",
+            "elif echo \"$MPI_LIST\" | grep -Eq '(^|[^[:alnum:]_])pmi2([^[:alnum:]_]|$)'; then",
+            "  SRUN_MPI_OPT=--mpi=pmi2",
+            "else",
+            "  echo \"No supported srun MPI plugin found: ${MPI_LIST}\" >&2",
+            "  exit 70",
+            "fi",
+            "",
             "run_case() {",
             "  local case_dir=\"$1\"",
             "  echo \"PICLas case ${case_dir}\"",
             "  cd \"$case_dir\" || exit 1",
             "  start=$(date +%s%3N)",
-            f"  mpirun -np {self.mpi_procs} ./piclas parameter.ini DSMC1.ini",
+            "  srun $SRUN_MPI_OPT --kill-on-bad-exit=1 -n \"$NTASKS\" ./piclas parameter.ini DSMC1.ini",
             "  status=$?",
             "  end=$(date +%s%3N)",
             "  runtime=$((end - start))",
@@ -762,6 +801,24 @@ class PiclasSimulator:
             print(f"Warte auf Abschluss von {len(pending_job_ids)} Jobs...")
             time.sleep(poll_interval)
         print("Alle Jobs abgeschlossen!")
+
+    def _wait_for_submission_slot(self, active_job_ids):
+        """Return tracked jobs still active after waiting for a submission slot."""
+        active = [str(job_id) for job_id in active_job_ids]
+        while len(active) >= self.max_concurrent_jobs:
+            states = self._query_job_states(active)
+            active = [
+                job_id
+                for job_id in active
+                if states.get(job_id) not in (None, "CG")
+            ]
+            if len(active) >= self.max_concurrent_jobs:
+                print(
+                    f"Maximal {self.max_concurrent_jobs} PICLas-Jobs gleichzeitig; "
+                    f"warte auf freien Submission-Slot ({len(active)} aktiv)."
+                )
+                time.sleep(self.submission_poll_interval_s)
+        return active
 
     def _surface_state_glob_pattern(self, job_subdir=None, geometry_id=None, geometry_mesh=None):
         if job_subdir is not None:
@@ -832,16 +889,19 @@ class PiclasSimulator:
             )
 
             pending_job_ids = []
+            active_retry_job_ids = []
             for subdir in failed_subdirs:
                 self._cleanup_job_outputs_for_retry(subdir)
-                job_script_path = os.path.join(subdir, self.job_template)
-                if not os.path.exists(job_script_path):
-                    job_script_path = self.create_simulation_job_script(subdir)
+                # Always regenerate retries so scheduler/launcher fixes are not
+                # bypassed by a stale job script from the failed submission.
+                job_script_path = self.create_simulation_job_script(subdir)
+                active_retry_job_ids = self._wait_for_submission_slot(active_retry_job_ids)
                 if self.submit_sleep_s > 0.0:
                     time.sleep(self.submit_sleep_s)
                 job_id = self.submit_simulation_job(job_script_path)
                 print(f"Retry-Job {job_id} für {os.path.basename(subdir)} gestartet.")
                 pending_job_ids.append(job_id)
+                active_retry_job_ids.append(job_id)
 
     def submit_postprocessing_job(self, list_of_job_subdirs, random_seed, wait_for_completion=True):
         postproc_dir = os.path.join(self.piclas_dir, "postprocessing")
@@ -1088,6 +1148,7 @@ class PiclasSimulator:
         reference_area_m2=None,
     ):
         job_ids = []
+        active_job_ids = []
         job_subdirs = []
         aos_seq = _expand_values(aos_values if aos_values is not None else AoS, len(db_indices), float(AoS))
         aoa_seq = _expand_values(aoa_values if aoa_values is not None else 0.0, len(db_indices), 0.0)
@@ -1118,6 +1179,7 @@ class PiclasSimulator:
                     job_script = self.create_simulation_job_script(group_subdirs[0])
                 else:
                     job_script = self.create_simulation_group_job_script(group_subdirs)
+                active_job_ids = self._wait_for_submission_slot(active_job_ids)
                 if self.submit_sleep_s > 0.0:
                     time.sleep(self.submit_sleep_s)
                 job_id = self.submit_simulation_job(job_script)
@@ -1126,6 +1188,7 @@ class PiclasSimulator:
                     f"({len(group_db_indices)} cases) erstellt und gestartet."
                 )
                 job_ids.append(job_id)
+                active_job_ids.append(job_id)
                 group_subdirs = []
                 group_db_indices = []
 
