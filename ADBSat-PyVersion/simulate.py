@@ -740,6 +740,12 @@ def run_simulation(
 
     # GSI / surface parameter overrides from payload (sample-level first).
     surface_params = _resolve_surface_parameters(payload)
+    # Classical Maxwell uses alpha as the diffuse-reflection fraction. PICLas
+    # exposes the corresponding campaign variable as MomentumACC.
+    if str(gsi_model).strip().lower() == "maxwell" and _payload_has_key(
+        payload, ["momentum_accommodation"]
+    ):
+        surface_params["alpha"] = surface_params["momentum_accommodation"]
     inparam["alpha"] = _as_panel_array(surface_params["alpha"], N_elems, 0.9)
     inparam["trans_accommodation"] = _as_panel_array(surface_params["trans_accommodation"], N_elems, 0.9)
     inparam["momentum_accommodation"] = _as_panel_array(surface_params["momentum_accommodation"], N_elems, 0.81)

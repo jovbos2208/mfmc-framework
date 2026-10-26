@@ -1,4 +1,4 @@
-# Fixed-attitude MFMC budget-convergence study at AoS=45 deg and AoA=0 deg.
+# Fixed-attitude MFMC budget-convergence study at AoS=0 deg and AoA=45 deg.
 # Every budget is expressed as a multiple of the measured mean TPMC pilot cost.
 
 study:
@@ -28,8 +28,8 @@ geometries:
       reference_area_source: piclas_h5_OBJ_half_total_surface
 
 regimes:
-  - id: AO_1E15_FIXED_AOS_P045_AOA_P000
-    label: Fixed pure atomic oxygen at 1e15 particles per cubic metre; AoS=45 deg; AoA=0 deg
+  - id: AO_1E15_FIXED_AOS_P000_AOA_P045
+    label: Fixed pure atomic oxygen at 1e15 particles per cubic metre; AoS=0 deg; AoA=45 deg
     descriptors:
       altitude_km: 313.0
       characteristic_length: 0.35902899
@@ -76,7 +76,6 @@ models:
       collision_mode: 0
       calc_quality_factors: false
       submission_group_size: 2
-      qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
       payload_defaults:
         # Sentman-consistent diffuse reflection; sampled energy_accommodation still sets TransACC.
         momentum_accommodation: 1.0
@@ -90,7 +89,6 @@ models:
       kwargs:
         simulator_module: ADBSat
         base_dir: ADBSat-PyVersion
-        qoi_aliases: {C_L: C_Y, C_L2: C_Y2}
   available_qois:
     PICLas_TPMC: [C_D, C_D2, C_L, C_L2]
     Sentman: [C_D, C_D2, C_L, C_L2]
@@ -109,20 +107,20 @@ pilot:
   robustness_repetitions: 50
   # Relative to this config file. The pilot output itself is written relative
   # to the Framework repository root when the pilot config is run there.
-  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aos45/pilot
-  source_study_id: specpractopt_cylinder_hex_gsi_sentman_diffuse_aos45_pilot
+  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aoa45/pilot
+  source_study_id: specpractopt_cylinder_hex_gsi_sentman_diffuse_aoa45_pilot
   source_mode: mixed_uncertainty
   reuse_external_model_evaluation_stats: true
   reuse_across_budgets: true
 
 budget:
   from_model_evaluations:
-    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aos45/pilot/model_evaluations.csv
+    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aoa45/pilot/model_evaluations.csv
     phase: pilot_hf
     model_id: PICLas_TPMC
     qoi: C_D
     geometry_id: SpecPractOpt_cylinder_hex
-    regime_id: AO_1E15_FIXED_AOS_P045_AOA_P000
+    regime_id: AO_1E15_FIXED_AOS_P000_AOA_P045
     cost_column: cost
     multiples: [10.0, 20.0, 50.0, 100.0]
   # Validation fallback before the pilot exists. Once model_evaluations.csv is
@@ -135,7 +133,7 @@ repetitions: 20
 seeds: {global: 20260922}
 
 outputs:
-  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aos45/mfmc_convergence
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_gsi_sentman_diffuse_aoa45/mfmc_convergence
   write_parquet: false
   write_model_evaluations: true
   write_config_snapshot: true

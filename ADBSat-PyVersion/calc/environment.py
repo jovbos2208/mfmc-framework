@@ -267,7 +267,16 @@ def _flow_unit_from_angles(aos_deg, aoa_deg, flow_zero_direction=None):
 
 
 def _relative_flow_speed_from_payload(payload, nominal_speed_mps):
-    explicit = payload.get("relative_flow_speed_mps")
+    explicit = _payload_value(
+        payload,
+        [
+            "relative_flow_speed_mps",
+            "relative_speed_mps",
+            "flow_speed_mps",
+            "freestream_speed_mps",
+        ],
+        None,
+    )
     try:
         if explicit is not None:
             speed = float(explicit)
@@ -435,13 +444,8 @@ def environment(param_eq, database, idx, h, env_payload=None, env_model="csv"):
     param_eq["mmean"] = mmean
     param_eq["massConc"] = rho[:8] / max(np.sum(rho[:8]), 1e-30)
     param_eq["Rmean"] = (constants.R / mmean) * 1000
-    param_eq["vinf"] = np.sqrt(constants.mu_E / (constants.R_E + h))
-
-    wind_vec = payload.get("wind_enu_mps")
-    if wind_vec is None:
-        wind_vec = _sample_hwm14_wind(payload, h / 1000.0)
-    if isinstance(wind_vec, (list, tuple)) and len(wind_vec) >= 2 and bool(payload.get("apply_wind_to_speed", False)):
-        param_eq["vinf"] = _relative_flow_speed_from_payload(payload, param_eq["vinf"])
+    orbital_speed = np.sqrt(constants.mu_E / (constants.R_E + h))
+    param_eq["vinf"] = _relative_flow_speed_from_payload(payload, orbital_speed)
 
     param_eq["vth"] = np.sqrt(2 * constants.kb * param_eq["Tinf"] / (mmean / constants.NA / 1000))
     param_eq["s"] = param_eq["vinf"] / max(param_eq["vth"], 1e-30)

@@ -311,6 +311,42 @@ class TestADBSatPayloadIntegration(unittest.TestCase):
         np.testing.assert_allclose(captured["inparam"]["sigmaT"], np.full(4, 0.7, dtype=float))
         self.assertAlmostEqual(321.0, float(captured["inparam"]["Tw"]), places=12)
 
+    def test_classical_maxwell_binds_momentum_accommodation_to_alpha(self):
+        payload = {
+            "environment_model": "csv",
+            "geometry_id": "Cube",
+            "atmosphere_row": [9.1e-10, 1.1e12, 2.2e12, 3.3e12, 4.4e12,
+                               5.5e10, 6.6e10, 7.7e10, 8.8e10, 9.9e10, 987.0],
+            "trans_accommodation": 1.0,
+            "sample": {"momentum_accommodation": 0.42},
+        }
+        captured = {}
+
+        def fake_calc_coeff(
+            mod_out, res_out, aoa_list, aos_list, inparam, shadow, solar,
+            dyn_p, delete_temp_files, verbose, return_details=True,
+        ):
+            captured["inparam"] = inparam
+            return {"C_D": 0.5, "C_L": 0.0, "C_Mx": 0.0, "C_My": 0.0, "C_Mz": 0.0}
+
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(adbsat_simulate, "loadmat", return_value=_fake_mesh()), patch.object(
+                adbsat_simulate, "_load_atmosphere_database",
+                side_effect=AssertionError("CSV fallback should not be used"),
+            ), patch.object(adbsat_simulate, "calc_coeff", side_effect=fake_calc_coeff):
+                adbsat_simulate.run_simulation(
+                    gsi_model="Maxwell", run_id=7, altitude=200, aos_deg=0.0,
+                    adbsat_path=td, env_payload_path=payload,
+                )
+
+        np.testing.assert_allclose(captured["inparam"]["alpha"], np.full(4, 0.42))
+        np.testing.assert_allclose(
+            captured["inparam"]["momentum_accommodation"], np.full(4, 0.42)
+        )
+        np.testing.assert_allclose(
+            captured["inparam"]["trans_accommodation"], np.full(4, 1.0)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

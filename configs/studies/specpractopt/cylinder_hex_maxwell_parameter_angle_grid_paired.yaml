@@ -3,7 +3,7 @@
 #   python3 -m mfmc_campaign.cli run-pilots \
 #     configs/studies/specpractopt/cylinder_hex_maxwell_parameter_angle_grid_paired.yaml
 #
-# Grid: 7 AoS values x 6 momentum-accommodation values = 42 paired points.
+# Grid: 7 AoA values x 6 momentum-accommodation values = 42 paired points.
 
 study:
   id: specpractopt_cylinder_hex_tpmc_maxwell_parameter_angle_grid_paired
@@ -63,6 +63,8 @@ regimes:
     - 961.0
 
 variables:
+# Shared sweep parameter: PICLas consumes this as MomentumACC; the classical
+# ADBSat Maxwell adapter binds the same value to Maxwell alpha.
 - name: momentum_accommodation
   source_block: gsi.momentum_accommodation
   distribution:
@@ -95,9 +97,6 @@ models:
       piclas_mode: tpmc
       collision_mode: 0
       calc_quality_factors: false
-      qoi_aliases:
-        C_L: C_Y
-        C_L2: C_Y2
       payload_defaults:
         t_end_s: 1.0e-4
         manual_timestep_s: 1.0e-7
@@ -108,13 +107,10 @@ models:
   lf:
   - id: Maxwell
     kind: legacy_adbsat
-    method: PICLasMaxwell
+    method: Maxwell
     kwargs:
       simulator_module: ADBSat
       base_dir: ADBSat-PyVersion
-      qoi_aliases:
-        C_L: C_Y
-        C_L2: C_Y2
   available_qois:
     PICLas_TPMC: [C_D, C_D2, C_L, C_L2]
     Maxwell: [C_D, C_D2, C_L, C_L2]

@@ -62,6 +62,13 @@ PICLas seeds per anchor. Submit and collect it with
 `scripts/run_piclas_adapter_workflow.py` and
 `configs/studies/vleo_cll/cylinder_hex_cll_piclas_seed_repeats.json`.
 
+The geometry-dependent repeatability check applies the same three anchors and
+five repetitions to the existing nose-0.30 transfer geometry. Its config is
+`cylinder_hex_nose_0p30_cll_piclas_seed_repeats.json`. This is a Phase-3 noise
+diagnostic, not Search or Holdout data. It needs only the existing HDF5 mesh at
+`outputs/vleo_geometry/cylinder_hex_nose_0p30_scale_0p1/`; ADBSat assets are
+not used by this PICLas-only request.
+
 The geometry-transfer pilot changes only `nose_length_fraction` from `0.20` to
 `0.30` while retaining length, volume, envelope limits, tail, chamfer, flow and
 the exact ordered 20-point baseline CLL sample. Its config is

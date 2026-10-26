@@ -20,8 +20,8 @@ geometries:
     reference_area_source: piclas_h5_OBJ_half_total_surface
     piclas_object_boundary_name: OBJ
 regimes:
-- id: AO_1E15_FIXED_AOS_P045_AOA_P000
-  label: Fixed pure atomic oxygen at 1e15 particles per cubic metre; AoS=45 deg; AoA=0 deg
+- id: AO_1E15_FIXED_AOS_P000_AOA_P045
+  label: Fixed pure atomic oxygen at 1e15 particles per cubic metre; AoS=0 deg; AoA=45 deg
   descriptors:
     altitude_km: 313.0
     characteristic_length: 0.35902899
@@ -40,6 +40,8 @@ regimes:
     aos_deg: 0.0
     aoa_deg: 45.0
 variables:
+# Shared uncertain parameter: PICLas consumes this as MomentumACC; the
+# classical ADBSat Maxwell adapter binds the same value to Maxwell alpha.
 - name: momentum_accommodation
   source_block: gsi.momentum_accommodation
   distribution:
@@ -66,9 +68,6 @@ models:
       collision_mode: 0
       submission_group_size: 2
       calc_quality_factors: false
-      qoi_aliases:
-        C_L: C_Y
-        C_L2: C_Y2
       payload_defaults:
         t_end_s: 0.0001
         manual_timestep_s: 1.0e-07
@@ -79,13 +78,10 @@ models:
   lf:
   - id: Maxwell
     kind: legacy_adbsat
-    method: PICLasMaxwell
+    method: Maxwell
     kwargs:
       simulator_module: ADBSat
       base_dir: ADBSat-PyVersion
-      qoi_aliases:
-        C_L: C_Y
-        C_L2: C_Y2
   available_qois:
     PICLas_TPMC:
     - C_D
@@ -115,19 +111,19 @@ pilot:
   sizes:
   - 50
   robustness_repetitions: 50
-  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_maxwell_aos45/pilot
-  source_study_id: specpractopt_cylinder_hex_maxwell_aos45_pilot
+  dir: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_maxwell_aoa45/pilot
+  source_study_id: specpractopt_cylinder_hex_maxwell_aoa45_pilot
   source_mode: mixed_uncertainty
   reuse_external_model_evaluation_stats: true
   reuse_across_budgets: true
 budget:
   from_model_evaluations:
-    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_maxwell_aos45/pilot/model_evaluations.csv
+    path: ../../../campaign_outputs/SpecPractOpt_cylinder_hex_maxwell_aoa45/pilot/model_evaluations.csv
     phase: pilot_hf
     model_id: PICLas_TPMC
     qoi: C_D
     geometry_id: SpecPractOpt_cylinder_hex
-    regime_id: AO_1E15_FIXED_AOS_P045_AOA_P000
+    regime_id: AO_1E15_FIXED_AOS_P000_AOA_P045
     cost_column: cost
     multiples:
     - 10.0
@@ -145,7 +141,7 @@ repetitions: 20
 seeds:
   global: 20260922
 outputs:
-  dir: campaign_outputs/SpecPractOpt_cylinder_hex_maxwell_aos45/mfmc_convergence
+  dir: campaign_outputs/SpecPractOpt_cylinder_hex_maxwell_aoa45/mfmc_convergence
   write_parquet: false
   write_model_evaluations: true
   write_config_snapshot: true

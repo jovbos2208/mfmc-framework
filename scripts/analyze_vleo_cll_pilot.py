@@ -148,7 +148,20 @@ def main() -> None:
     scale_ratio = max(cd["hf_mean"], cd["lf_mean"]) / max(
         min(cd["hf_mean"], cd["lf_mean"]), 1.0e-300
     )
-    markdown = f"""# Phase-3 audit of the CLL baseline pilot
+    if cd["pearson_rho"] >= 0.95 and scale_ratio <= 1.2:
+        interpretation = (
+            "The paired response exhibits very high correlation and close mean agreement. "
+            "This supports retaining ADBSat as a provisional control variate for this geometry, "
+            "subject to cross-geometry transfer and provenance checks."
+        )
+    else:
+        interpretation = (
+            "The paired response does not pass the numerical control-variate provenance screen "
+            "(correlation >= 0.95 and mean ratio <= 1.2). Do not use these LF values for MFMC "
+            "or geometry-difference inference until geometry selection, reference area, and "
+            "solver-side inputs have been corrected and the campaign rerun."
+        )
+    markdown = f"""# Phase-3 audit of the CLL pilot
 
 Raw input: `{raw.name}`  
 SHA-256: `{report['raw_sha256']}`  
@@ -177,7 +190,7 @@ Bootstrap: {args.bootstrap_draws} paired resamples, seed {args.seed}
 | Equal-cost MFMC variance / plain-MC variance | {cd['equal_cost_relative_variance']:.4f} |
 | Equal-cost MFMC SE / plain-MC SE | {cd['equal_cost_relative_standard_error']:.4f} |
 
-The corrected baseline geometry exhibits exceptionally high paired correlation at the sampled CLL points. ADBSat is also very cheap and its mean response closely matches PICLas (mean ratio {scale_ratio:.3g}). This is strong evidence for retaining it as a provisional control variate on this geometry, but it is not yet evidence that the correlation transfers to perturbed geometries. The continuous MFMC allocation is an asymptotic cost-model result rather than a production recommendation; it must be bounded by the finite two-dimensional input domain, implementation overhead, and geometry-transfer tests.
+{interpretation} The observed mean ratio is {scale_ratio:.3g}. The continuous MFMC allocation is an asymptotic cost-model result rather than a production recommendation; it must be bounded by the finite two-dimensional input domain, implementation overhead, and geometry-transfer tests.
 
 ## Gate G3 decision
 

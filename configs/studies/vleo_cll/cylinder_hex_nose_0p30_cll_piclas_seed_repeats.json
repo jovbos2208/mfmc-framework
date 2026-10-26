@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "similarity": {"linear_scale": 1.0, "density_scale": 1.0},
+  "adapter": {
+    "model_id": "PICLas_TPMC_CLL",
+    "fidelity": "hf",
+    "available_qois": ["C_D", "C_D2"],
+    "kwargs": {
+      "simulator_module": "PICLas",
+      "piclas_dir": "piclas",
+      "update_dir": "update_parameter_file",
+      "update_script": "python update_parameter.py",
+      "piclas_mode": "tpmc",
+      "collision_mode": 0,
+      "mpi_procs": 128,
+      "submission_group_size": 2,
+      "payload_defaults": {
+        "piclas_surface_model": 0,
+        "piclas_surface_model_scattering": 1,
+        "wall_temperature_k": 300.0,
+        "t_end_s": 0.0001,
+        "manual_timestep_s": 1e-7,
+        "sampling_iterations": 250
+      }
+    }
+  },
+  "request": {
+    "study_id": "vleo_cylinder_hex_nose_0p30_cll_piclas_seed_repeats",
+    "cell_id": "nose_0p30_three_cll_anchors_five_seeds",
+    "qois": ["C_D", "C_D2"],
+    "seed": 20261024,
+    "geometry": {
+      "id": "cylinder_hex_nose_0p30_scale_0p1",
+      "name": "cylinder_hex_nose_0p30_scale_0p1",
+      "characteristic_length": 0.1,
+      "geometry_class": "parametric_cylinder_hex",
+      "metadata": {
+        "hf_mesh": "../outputs/vleo_geometry/cylinder_hex_nose_0p30_scale_0p1/cylinder_hex_nose_0p30_scale_0p1_mesh.h5",
+        "piclas_object_boundary_name": "CYLINDER_HEX"
+      }
+    },
+    "regime": {
+      "id": "AO_1E15_FIXED_AXIAL",
+      "label": "Fixed pure atomic oxygen reference state",
+      "descriptors": {"altitude_km": 313.0}
+    },
+    "active_source_blocks": ["gsi.cll"],
+    "sample_ids": [
+      "low-seed-01", "low-seed-02", "low-seed-03", "low-seed-04", "low-seed-05",
+      "mid-seed-01", "mid-seed-02", "mid-seed-03", "mid-seed-04", "mid-seed-05",
+      "high-seed-01", "high-seed-02", "high-seed-03", "high-seed-04", "high-seed-05"
+    ],
+    "samples": [
+      {"cll_alpha_n": 0.1, "cll_sigma_t": 0.1, "random_seed": 2026102401},
+      {"cll_alpha_n": 0.1, "cll_sigma_t": 0.1, "random_seed": 2026102402},
+      {"cll_alpha_n": 0.1, "cll_sigma_t": 0.1, "random_seed": 2026102403},
+      {"cll_alpha_n": 0.1, "cll_sigma_t": 0.1, "random_seed": 2026102404},
+      {"cll_alpha_n": 0.1, "cll_sigma_t": 0.1, "random_seed": 2026102405},
+      {"cll_alpha_n": 0.5, "cll_sigma_t": 0.5, "random_seed": 2026102451},
+      {"cll_alpha_n": 0.5, "cll_sigma_t": 0.5, "random_seed": 2026102452},
+      {"cll_alpha_n": 0.5, "cll_sigma_t": 0.5, "random_seed": 2026102453},
+      {"cll_alpha_n": 0.5, "cll_sigma_t": 0.5, "random_seed": 2026102454},
+      {"cll_alpha_n": 0.5, "cll_sigma_t": 0.5, "random_seed": 2026102455},
+      {"cll_alpha_n": 0.9, "cll_sigma_t": 0.9, "random_seed": 2026102491},
+      {"cll_alpha_n": 0.9, "cll_sigma_t": 0.9, "random_seed": 2026102492},
+      {"cll_alpha_n": 0.9, "cll_sigma_t": 0.9, "random_seed": 2026102493},
+      {"cll_alpha_n": 0.9, "cll_sigma_t": 0.9, "random_seed": 2026102494},
+      {"cll_alpha_n": 0.9, "cll_sigma_t": 0.9, "random_seed": 2026102495}
+    ],
+    "metadata": {
+      "environment_model": "csv",
+      "atmosphere_row": [2.65669645265334e-11, 0.0, 0.0, 1e15, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 961.0],
+      "relative_speed_mps": 7718.371,
+      "wall_temperature_k": 300.0,
+      "flow_zero_direction": [1.0, 0.0, 0.0],
+      "aos_deg": 0.0,
+      "aoa_deg": 0.0,
+      "case_name": "cylinder_hex_nose_0p30_cll_piclas_seed_repeats"
+    }
+  }
+}
