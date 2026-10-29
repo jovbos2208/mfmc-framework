@@ -19,6 +19,7 @@ from calc.ADBSatConstants import ConstantsData
 import multiprocessing
 import re
 import inspect
+from functools import lru_cache
 
 
 SURFACE_STATE_PRESETS = {
@@ -47,6 +48,12 @@ GEOMETRY_MODEL_FALLBACK = {
     "GOCE": "Triple_Cube",
     "CHAMP": "CubeSat",
 }
+
+
+@lru_cache(maxsize=8)
+def _load_geometry_mat(path):
+    """Load immutable geometry data once per worker process."""
+    return loadmat(os.path.abspath(path))
 
 
 def _finite_summary(name, value):
@@ -677,7 +684,7 @@ def run_simulation(
 
     # Import model
     mod_out = os.path.join(adbsat_path,'inou','models',f'{mod_name}.mat')
-    mesh = loadmat(mod_out)
+    mesh = _load_geometry_mat(mod_out)
     expected_mesh_fingerprint = str(payload.get("surface_mesh_fingerprint", "")).strip()
     if expected_mesh_fingerprint:
         actual_mesh_fingerprint = _loaded_mat_string(mesh, "mesh_fingerprint")
@@ -906,6 +913,8 @@ def run_simulation(
             ).strip().lower() not in {"0", "false", "no", "off"}
         if accepts_kwargs or "return_details" in calc_signature.parameters:
             calc_kwargs["return_details"] = True
+        if accepts_kwargs or "mat_data" in calc_signature.parameters:
+            calc_kwargs["mat_data"] = mesh
     except (TypeError, ValueError):
         pass
     coeffs = calc_coeff(
@@ -955,6 +964,10 @@ def parallel_run(param_list, altitude, aos_deg, adbsat_path, num_workers=32):
     :param adbsat_path: The base path for ADBSat
     :param num_workers: Number of parallel processes
     """
+    if not param_list:
+        raise ValueError("param_list must contain at least one simulation")
+    num_workers = max(1, min(int(num_workers), len(param_list)))
+
     job_args = []
     for item in param_list:
         gsi_model = item[0]
@@ -1079,5 +1092,10 @@ if __name__ == "__main__":
     # Read input file with gsi_model and run_id
     simulations = read_input_file(txt_file)
 
-    # Run parallel simulations
-    parallel_run(simulations, altitude, aos_deg, adbsat_path)
+    # ``ADBSat.py`` maps its config option ``mpi_procs`` to this environment
+    # variable. ADBSat uses local multiprocessing rather than MPI, so the
+    # effective worker count is also capped by the number of simulations.
+    num_workers = int(os.environ.get("ADBSAT_NUM_WORKERS", "32"))
+    if num_workers < 1:
+        raise ValueError("ADBSAT_NUM_WORKERS must be at least 1")
+    parallel_run(simulations, altitude, aos_deg, adbsat_path, num_workers=num_workers)

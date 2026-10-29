@@ -59,11 +59,14 @@ def wind_projected_reference_area_from_obj(obj_file: str, flow_dir: np.ndarray, 
 
 class ADBSatSimulator:
     def __init__(self, method, simulation_script='python {base_dir}/simulate.py', base_dir='ADBSat-PyVersion',
-                 job_template="job_adbsat.sh"):
+                 job_template="job_adbsat.sh", mpi_procs=32):
         self.method = method
         self.simulation_script = simulation_script
         self.base_dir = os.path.abspath(base_dir)
         self.job_template = job_template
+        self.mpi_procs = int(mpi_procs)
+        if self.mpi_procs < 1:
+            raise ValueError("mpi_procs must be at least 1")
 
     def _resolved_simulation_script(self):
         repo_root = os.path.dirname(self.base_dir)
@@ -101,7 +104,7 @@ class ADBSatSimulator:
             f"#SBATCH --error={stderr_path}",
             "#SBATCH --nodes=1",
             "#SBATCH --ntasks=1",
-            "#SBATCH --cpus-per-task=128",
+            f"#SBATCH --cpus-per-task={self.mpi_procs}",
             "#SBATCH --time=24:00:00",
             "#SBATCH --mail-type=NONE",
             "#SBATCH --partition=cpu",
@@ -111,6 +114,7 @@ class ADBSatSimulator:
             "",
             f"cd {shlex.quote(job_subdir)}",
             "",
+            f"export ADBSAT_NUM_WORKERS={self.mpi_procs}",
             "rm -f all_results.txt",
             command_line,
             "",
@@ -122,9 +126,12 @@ class ADBSatSimulator:
         os.chmod(job_script_path, 0o755)
 
         if shutil.which("sbatch") is None:
+            local_env = os.environ.copy()
+            local_env["ADBSAT_NUM_WORKERS"] = str(self.mpi_procs)
             result = subprocess.run(
                 command,
                 cwd=job_subdir,
+                env=local_env,
                 capture_output=True,
                 text=True,
                 check=True,

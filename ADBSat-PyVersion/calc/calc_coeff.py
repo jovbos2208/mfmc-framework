@@ -27,7 +27,8 @@ def _reference_area(param_eq, half_total_area):
 
 def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
                delete_temp_files: bool = False, verbose: bool = False,
-               write_mat: bool = True, return_details: bool = False):
+               write_mat: bool = True, return_details: bool = False,
+               mat_data=None):
     """
     Calculates local and global aerodynamic (and, optionally, solar–radiation‑pressure)
     coefficients for a triangular‑mesh geometry.
@@ -68,7 +69,8 @@ def calc_coeff(fi_name, respath, aoaS, aosS, param_eq, flag_shad, flag_sol, dp,
     # -------------------------------------------------------------------------
     # 1) Load geometry from the input *.mat* file
     # -------------------------------------------------------------------------
-    mat_data = loadmat(fi_name)
+    if mat_data is None:
+        mat_data = loadmat(fi_name)
     meshdata = mat_data['meshdata']
 
     x = meshdata['XData'][0, 0]         # (N,) panel‑vertex x‑coordinates
