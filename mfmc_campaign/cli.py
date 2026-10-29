@@ -207,6 +207,8 @@ def _cmd_generate_cylinder_hex(args: argparse.Namespace) -> int:
         nose_length_fraction=args.nose_fraction,
         tail_length_fraction=args.tail_fraction,
         width_height_ratio=args.width_height_ratio,
+        front_width_height_ratio=args.front_width_height_ratio,
+        rear_width_height_ratio=args.rear_width_height_ratio,
         chamfer_fraction=args.chamfer_fraction,
         total_length_m=args.length_m,
         target_volume_m3=args.volume_m3,
@@ -463,6 +465,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_geometry.add_argument("--nose-fraction", type=float, default=0.20)
     p_geometry.add_argument("--tail-fraction", type=float, default=0.20)
     p_geometry.add_argument("--width-height-ratio", type=float, default=1.0)
+    p_geometry.add_argument(
+        "--front-width-height-ratio", type=float, default=None,
+        help="Front ratio; defaults to the legacy global width/height ratio",
+    )
+    p_geometry.add_argument(
+        "--rear-width-height-ratio", type=float, default=None,
+        help="Rear ratio; defaults to the legacy global width/height ratio",
+    )
     p_geometry.add_argument("--chamfer-fraction", type=float, default=0.15)
     p_geometry.add_argument("--length-m", type=float, default=1.0)
     p_geometry.add_argument("--volume-m3", type=float, default=0.12)

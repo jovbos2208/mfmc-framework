@@ -35,7 +35,9 @@ if str(UPDATE_PARAMETER_DIR) not in sys.path:
 from PICLas import PiclasSimulator, _boundary3_source_name, _resolve_update_command, _rewrite_job_ini_geometry
 from PICLas_prandtl import (
     PiclasSimulator as PrandtlPiclasSimulator,
+    _configure_open_boundaries_as_inflow as _configure_prandtl_open_inflow,
     _resolve_update_command as _resolve_prandtl_update_command,
+    _rewrite_job_ini_geometry as _rewrite_prandtl_job_ini_geometry,
 )
 import update_parameter as piclas_update
 from calc.environment import environment as adbsat_environment
@@ -363,6 +365,31 @@ class TestPiclasQoIAndEnvironmentConsistency(unittest.TestCase):
             ini_text = pathlib.Path(ini_path).read_text(encoding="utf-8")
 
         self.assertIn("Part-Species$-Surfaceflux1-BC = 2", ini_text)
+
+    def test_prandtl_geometry_and_all_open_boundary_inflow_for_object_boundary_two(self):
+        with tempfile.TemporaryDirectory() as td:
+            ini_path = pathlib.Path(td, "parameter.ini")
+            shutil.copyfile(UPDATE_PARAMETER_DIR / "parameter.ini", ini_path)
+
+            _rewrite_prandtl_job_ini_geometry(
+                str(ini_path),
+                mesh_file="SpecPractOpt_cylinder_hex_mesh.h5",
+                project_name="SpecPractOpt_cylinder_hex",
+                source_name="OBJ",
+                mesh_boundary_names=["IN", "OBJ", "OUT"],
+                object_boundary_index=2,
+            )
+            _configure_prandtl_open_inflow(str(ini_path), object_boundary_index=2)
+            ini_text = ini_path.read_text(encoding="utf-8")
+
+        self.assertIn("Part-Boundary1-SourceName  = IN", ini_text)
+        self.assertIn("Part-Boundary2-SourceName  = OBJ", ini_text)
+        self.assertIn("Part-Boundary3-SourceName  = OUT", ini_text)
+        self.assertIn("Part-Species$-nSurfaceFluxBCs = 2", ini_text)
+        self.assertIn("Part-Species$-Surfaceflux1-BC = 1", ini_text)
+        self.assertIn("Part-Species$-Surfaceflux2-BC = 3", ini_text)
+        self.assertIn("Part-Species1-Surfaceflux2-PartDensity", ini_text)
+        self.assertIn("Part-Species$-Surfaceflux2-VeloVecIC", ini_text)
 
     def test_update_parameter_applies_numerical_controls_from_payload(self):
         payload = {

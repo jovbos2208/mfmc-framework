@@ -8,6 +8,7 @@ import shlex
 import json
 import sys
 import uuid
+import re
 import numpy as np
 import meshio
 import scipy.io as sio
@@ -106,6 +107,7 @@ def _rewrite_job_ini_geometry(
     project_name: str,
     source_name: str,
     mesh_boundary_names=None,
+    object_boundary_index: int = 3,
 ) -> None:
     with open(ini_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -115,7 +117,13 @@ def _rewrite_job_ini_geometry(
         for name in (mesh_boundary_names or [])
         if str(name).strip()
     }
-    requested_boundaries = {1: "IN", 2: "OUT", 3: source_name}
+    if int(object_boundary_index) not in {1, 2, 3}:
+        raise ValueError("object_boundary_index must be 1, 2, or 3")
+    open_sources = iter(("IN", "OUT"))
+    requested_boundaries = {
+        index: source_name if index == int(object_boundary_index) else next(open_sources)
+        for index in (1, 2, 3)
+    }
     if boundary_lookup:
         missing = [
             name for name in requested_boundaries.values()
@@ -149,6 +157,56 @@ def _rewrite_job_ini_geometry(
 
     with open(ini_path, "w", encoding="utf-8") as f:
         f.writelines(updated)
+
+
+def _configure_open_boundaries_as_inflow(ini_path: str, object_boundary_index: int) -> None:
+    """Create one surface-flux definition for every non-object boundary group.
+
+    The meshes used here group the bounding box into ``IN`` (one face) and
+    ``OUT`` (the other five faces).  Applying the same ``maxwell_lpn`` flux to
+    both open particle boundaries lets PICLas use each face's local normal, so
+    only the upstream-facing portions inject directed freestream particles.
+    """
+    object_boundary_index = int(object_boundary_index)
+    if object_boundary_index not in {1, 2, 3}:
+        raise ValueError("object_boundary_index must be 1, 2, or 3")
+    inflow_indices = [index for index in (1, 2, 3) if index != object_boundary_index]
+
+    with open(ini_path, "r", encoding="utf-8") as handle:
+        lines = handle.readlines()
+
+    # Rebuild any pre-existing extra flux definitions from Surfaceflux1 so the
+    # operation is deterministic and idempotent.
+    extra_flux = re.compile(r"Surfaceflux(?:[2-9]|[1-9][0-9]+)-", re.IGNORECASE)
+    lines = [line for line in lines if not extra_flux.search(line)]
+    updated = []
+    found_count = False
+    found_flux1 = False
+    for line in lines:
+        if line.lstrip().startswith("Part-Species$-nSurfaceFluxBCs"):
+            updated.append(f"Part-Species$-nSurfaceFluxBCs = {len(inflow_indices)}\n")
+            found_count = True
+            continue
+        if "Surfaceflux1-" not in line:
+            updated.append(line)
+            continue
+
+        found_flux1 = True
+        if line.lstrip().startswith("Part-Species$-Surfaceflux1-BC"):
+            line = f"Part-Species$-Surfaceflux1-BC = {inflow_indices[0]}\n"
+        updated.append(line)
+        for flux_number, boundary_index in enumerate(inflow_indices[1:], start=2):
+            clone = line.replace("Surfaceflux1-", f"Surfaceflux{flux_number}-")
+            if clone.lstrip().startswith(f"Part-Species$-Surfaceflux{flux_number}-BC"):
+                clone = f"Part-Species$-Surfaceflux{flux_number}-BC = {boundary_index}\n"
+            updated.append(clone)
+
+    if not found_count or not found_flux1:
+        raise ValueError(
+            "parameter file must define nSurfaceFluxBCs and at least one Surfaceflux1 entry"
+        )
+    with open(ini_path, "w", encoding="utf-8") as handle:
+        handle.writelines(updated)
 
 
 def _patch_piclas_collision_mode(
@@ -603,12 +661,24 @@ class PiclasSimulator:
             geometry_mesh=geometry_mesh,
             object_boundary_name=object_boundary_name,
         )
+        object_boundary_index = 3
+        if env_payload_path:
+            with open(env_payload_path, "r", encoding="utf-8") as payload_file:
+                environment_payload = json.load(payload_file)
+            object_boundary_index = int(
+                environment_payload.get("piclas_object_boundary_index", 3)
+            )
         _rewrite_job_ini_geometry(
             job_ini_path,
             mesh_file=mesh_filename,
             project_name=project_name,
             source_name=source_name,
             mesh_boundary_names=mesh_boundary_names,
+            object_boundary_index=object_boundary_index,
+        )
+        _configure_open_boundaries_as_inflow(
+            job_ini_path,
+            object_boundary_index=object_boundary_index,
         )
         _patch_piclas_collision_mode(
             job_ini_path,
@@ -631,6 +701,10 @@ class PiclasSimulator:
                 "resolved_mesh_filename": mesh_filename,
                 "resolved_project_name": project_name,
                 "resolved_boundary3_source_name": source_name,
+                "resolved_object_boundary_index": object_boundary_index,
+                "surface_flux_boundary_indices": [
+                    index for index in (1, 2, 3) if index != object_boundary_index
+                ],
                 "job_ini_path": job_ini_path,
                 "debug_update_json": debug_paths["update_json"],
             }

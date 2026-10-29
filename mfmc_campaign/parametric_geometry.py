@@ -25,6 +25,8 @@ class CylinderHexSpec:
     nose_length_fraction: float = 0.20
     tail_length_fraction: float = 0.20
     width_height_ratio: float = 1.0
+    front_width_height_ratio: float | None = None
+    rear_width_height_ratio: float | None = None
     chamfer_fraction: float = 0.15
     total_length_m: float = 1.0
     target_volume_m3: float = 0.12
@@ -33,6 +35,12 @@ class CylinderHexSpec:
     nose_end_scale: float = 0.20
     tail_end_scale: float = 0.45
     axial_segments_per_taper: int = 1
+
+    def effective_width_height_ratios(self) -> Tuple[float, float]:
+        """Return front/rear ratios, falling back to the legacy global ratio."""
+        front = self.width_height_ratio if self.front_width_height_ratio is None else self.front_width_height_ratio
+        rear = self.width_height_ratio if self.rear_width_height_ratio is None else self.rear_width_height_ratio
+        return float(front), float(rear)
 
     def scaled(self, linear_factor: float) -> "CylinderHexSpec":
         factor = float(linear_factor)
@@ -72,6 +80,11 @@ class CylinderHexSpec:
             raise ParametricGeometryError("nose and tail fractions must sum to at most 0.75")
         if not 0.50 <= self.width_height_ratio <= 2.0:
             raise ParametricGeometryError("width_height_ratio must be in [0.50, 2.0]")
+        front_ratio, rear_ratio = self.effective_width_height_ratios()
+        if not np.isfinite([front_ratio, rear_ratio]).all():
+            raise ParametricGeometryError("front/rear width-height ratios must be finite")
+        if not 0.50 <= front_ratio <= 2.0 or not 0.50 <= rear_ratio <= 2.0:
+            raise ParametricGeometryError("front/rear width-height ratios must be in [0.50, 2.0]")
         if not 0.02 <= self.chamfer_fraction <= 0.35:
             raise ParametricGeometryError("chamfer_fraction must be in [0.02, 0.35]")
         if self.total_length_m <= 0.0 or self.target_volume_m3 <= 0.0:
@@ -126,11 +139,17 @@ def _scale_square_integral(spec: CylinderHexSpec) -> float:
 def _derived_dimensions(spec: CylinderHexSpec) -> Dict[str, float]:
     section_factor = 1.0 - 2.0 * spec.chamfer_fraction**2
     maximum_section_area = spec.target_volume_m3 / _scale_square_integral(spec)
-    height = np.sqrt(maximum_section_area / (spec.width_height_ratio * section_factor))
-    width = spec.width_height_ratio * height
+    front_ratio, rear_ratio = spec.effective_width_height_ratios()
+    ratios = np.asarray([front_ratio, rear_ratio], dtype=float)
+    heights = np.sqrt(maximum_section_area / (ratios * section_factor))
+    widths = ratios * heights
     return {
-        "width_m": float(width),
-        "height_m": float(height),
+        "width_m": float(np.max(widths)),
+        "height_m": float(np.max(heights)),
+        "front_width_m": float(widths[0]),
+        "front_height_m": float(heights[0]),
+        "rear_width_m": float(widths[1]),
+        "rear_height_m": float(heights[1]),
         "maximum_cross_section_area_m2": float(maximum_section_area),
         "center_length_m": float(
             spec.total_length_m * (1.0 - spec.nose_length_fraction - spec.tail_length_fraction)
@@ -226,20 +245,20 @@ def _orient_outward(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
 def generate_cylinder_hex(spec: CylinderHexSpec) -> Tuple[SurfaceMesh, Dict[str, float]]:
     spec.validate()
     derived = _derived_dimensions(spec)
-    if derived["width_m"] > spec.max_width_m + 1.0e-12:
-        raise ParametricGeometryError(
-            f"Fixed-volume width {derived['width_m']:.6g} m exceeds envelope {spec.max_width_m:.6g} m"
-        )
-    if derived["height_m"] > spec.max_height_m + 1.0e-12:
-        raise ParametricGeometryError(
-            f"Fixed-volume height {derived['height_m']:.6g} m exceeds envelope {spec.max_height_m:.6g} m"
-        )
-    section = _cross_section(derived["width_m"], derived["height_m"], spec.chamfer_fraction)
     stations = _stations(spec)
+    front_ratio, rear_ratio = spec.effective_width_height_ratios()
     points: List[List[float]] = []
     for x, scale in stations:
+        fraction = x / spec.total_length_m
+        ratio = front_ratio + fraction * (rear_ratio - front_ratio)
+        height = np.sqrt(
+            derived["maximum_cross_section_area_m2"]
+            / (ratio * (1.0 - 2.0 * spec.chamfer_fraction**2))
+        )
+        width = ratio * height
+        section = _cross_section(width, height, spec.chamfer_fraction)
         points.extend([[x, scale * y, scale * z] for y, z in section])
-    ring_size = len(section)
+    ring_size = 8
     triangles: List[List[int]] = []
     for ring in range(len(stations) - 1):
         first = ring * ring_size
@@ -258,7 +277,47 @@ def generate_cylinder_hex(spec: CylinderHexSpec) -> Tuple[SurfaceMesh, Dict[str,
         triangles.append([nose_center, index, next_index])
         triangles.append([tail_center, last_ring + next_index, last_ring + index])
     point_array = np.asarray(points, dtype=float)
-    triangle_array = _orient_outward(point_array, np.asarray(triangles, dtype=np.int64))
+    if np.isclose(front_ratio, rear_ratio, rtol=0.0, atol=0.0):
+        triangle_array = _orient_outward(point_array, np.asarray(triangles, dtype=np.int64))
+    else:
+        # Corresponding vertices of unequal rectangles form warped side quads.
+        # Their arbitrary diagonal can violate the convexity required by the
+        # free-molecular panel model.  Triangulate the convex envelope instead
+        # and discard hull-interior construction points.
+        from scipy.spatial import ConvexHull
+
+        hull = ConvexHull(point_array)
+        used = np.unique(hull.simplices)
+        remap = np.full(len(point_array), -1, dtype=np.int64)
+        remap[used] = np.arange(len(used), dtype=np.int64)
+        point_array = point_array[used]
+        triangle_array = _orient_outward(point_array, remap[hull.simplices])
+    # Lofting between unequal aspect ratios introduces cross terms that are not
+    # present in the legacy similar-section frustum formula.  A uniform
+    # transverse correction restores the requested volume without changing any
+    # aspect ratio, axial fraction, or end scale.
+    xyz = point_array[triangle_array]
+    raw_volume = abs(float(np.sum(np.einsum("ij,ij->i", xyz[:, 0], np.cross(xyz[:, 1], xyz[:, 2])))) / 6.0)
+    transverse_scale = (
+        1.0
+        if np.isclose(front_ratio, rear_ratio, rtol=0.0, atol=0.0)
+        else np.sqrt(spec.target_volume_m3 / raw_volume)
+    )
+    point_array[:, 1:] *= transverse_scale
+    for name in (
+        "width_m", "height_m", "front_width_m", "front_height_m",
+        "rear_width_m", "rear_height_m",
+    ):
+        derived[name] *= transverse_scale
+    derived["maximum_cross_section_area_m2"] *= transverse_scale**2
+    if derived["width_m"] > spec.max_width_m + 1.0e-12:
+        raise ParametricGeometryError(
+            f"Fixed-volume width {derived['width_m']:.6g} m exceeds envelope {spec.max_width_m:.6g} m"
+        )
+    if derived["height_m"] > spec.max_height_m + 1.0e-12:
+        raise ParametricGeometryError(
+            f"Fixed-volume height {derived['height_m']:.6g} m exceeds envelope {spec.max_height_m:.6g} m"
+        )
     area, normal, center = _triangle_geometry(point_array, triangle_array)
     mesh = SurfaceMesh(
         points=point_array,

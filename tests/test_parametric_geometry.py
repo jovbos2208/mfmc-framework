@@ -90,6 +90,36 @@ def test_design_parameters_change_fingerprint_but_not_volume() -> None:
     )
 
 
+def test_separate_front_rear_aspect_ratios_preserve_volume_and_change_end_shapes() -> None:
+    spec = CylinderHexSpec(
+        front_width_height_ratio=1.8,
+        rear_width_height_ratio=0.6,
+        nose_end_scale=0.25,
+        tail_end_scale=0.55,
+    )
+    mesh, derived = generate_cylinder_hex(spec)
+    validation = validate_surface(mesh, spec)
+
+    assert validation["valid"]
+    assert validation["signed_volume_m3"] == pytest.approx(spec.target_volume_m3)
+    assert derived["front_width_m"] / derived["front_height_m"] == pytest.approx(1.8)
+    assert derived["rear_width_m"] / derived["rear_height_m"] == pytest.approx(0.6)
+    assert derived["front_width_m"] != pytest.approx(derived["rear_width_m"])
+
+
+def test_legacy_global_aspect_ratio_matches_explicit_equal_end_ratios() -> None:
+    legacy, _ = generate_cylinder_hex(CylinderHexSpec(width_height_ratio=1.3))
+    explicit, _ = generate_cylinder_hex(
+        CylinderHexSpec(
+            width_height_ratio=1.3,
+            front_width_height_ratio=1.3,
+            rear_width_height_ratio=1.3,
+        )
+    )
+
+    assert legacy.mesh_fingerprint == explicit.mesh_fingerprint
+
+
 def test_uniform_scaling_obeys_length_area_and_volume_laws() -> None:
     reference = CylinderHexSpec()
     scaled = reference.scaled(0.1)
